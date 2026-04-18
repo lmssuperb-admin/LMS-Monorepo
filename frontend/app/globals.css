@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  /* AcademyAI Design System - Tailwind v4 Standard */
+  --color-primary: var(--primary);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-glass-border: var(--glass-border);
+  
+  --color-background: var(--background);
+  --color-main: var(--text-main);
+  --color-muted: var(--text-muted);
+}
+
+:root {
+  --primary: #6366f1;
+  --background: #fdfdfd;
+  --surface: #ffffff;
+  --surface-hover: #f8fafc;
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --text-main: #020617;
+  --text-muted: #64748b;
+}
+
+/* Dark Mode logic inside CSS for v4 */
+.dark {
+  --primary: #818cf8;
+  --background: #02040b;
+  --surface: #0a0c1a;
+  --surface-hover: #12152b;
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+}
+
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--text-main);
+    transition: background-color 0.3s ease, color 0.3s ease;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  /* High-end Premium Classes */
+  .academy-card {
+    background-color: var(--surface);
+    border: 1px solid var(--glass-border);
+    border-radius: 40px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    transition: all 0.3s ease;
+  }
+  
+  .academy-input {
+    background-color: var(--background);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 1rem 1.5rem;
+    font-size: 0.875rem;
+    outline: none;
+    color: var(--text-main);
+    transition: all 0.2s ease;
+  }
+  
+  .academy-input:focus {
+    border-color: rgba(99, 102, 241, 0.5);
+  }
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 99px;
+}

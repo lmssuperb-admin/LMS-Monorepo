@@ -1,0 +1,318 @@
+'use client';
+import { useState, useEffect, useRef } from 'react';
+import { 
+  Users, BookOpen, ShieldCheck, Search, Plus, Activity, Loader2, 
+  MoreVertical, Edit2, X, ChevronRight, Filter, Globe, Database,
+  UserPlus, Mail, MapPin, Key, Lock, CheckSquare, Square, ChevronDown,
+  Info, Camera, PlusCircle, Tag, Phone, Home, Building, LayoutGrid, ScrollText,
+  Building2, Smartphone
+} from 'lucide-react';
+
+export default function MasterAdminConsole() {
+  const [mainTab, setMainTab] = useState('users'); 
+  const [subTab, setSubTab] = useState('Browse users');
+  const [data, setData] = useState({ users: [], courses: [], categories: [], cohorts: [], roles: [] });
+  const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [activeMenu, setActiveMenu] = useState(null);
+  const [modalSection, setModalSection] = useState('general');
+  const fileInputRef = useRef(null);
+  
+  const [form, setForm] = useState({
+    username: '', auth: 'manual', suspended: false, generatepass: false, password: '', forcechange: false,
+    firstname: '', lastname: '', email: '', visibility: '1', city: '', country: 'IN', timezone: '99', lang: 'en',
+    description: '', idnumber: '', institution: '', department: '', phone1: '', phone2: '', address: '',
+    profileimageurl: ''
+  });
+
+  useEffect(() => {
+    fetchTabData();
+  }, [mainTab, subTab]);
+
+  const fetchTabData = async () => {
+    setLoading(true);
+    try {
+      let endpoint = subTab === 'Browse users' ? 'users' : 'courses';
+      if (endpoint) {
+        const res = await fetch(`http://localhost:4000/api/${endpoint}`).then(r => r.json());
+        
+        let actualData = [];
+        if (Array.isArray(res)) {
+          actualData = res;
+        } else if (res && res.users && Array.isArray(res.users)) {
+          actualData = res.users;
+        } else if (res && Array.isArray(res.courses)) {
+          actualData = res.courses;
+        }
+        
+        setData(prev => ({ ...prev, [endpoint]: actualData }));
+      }
+    } catch (err) { console.error(err); }
+    setLoading(false);
+  };
+
+  const handleInitialize = async () => {
+     setLoading(true);
+     try {
+        const isEdit = showModal === 'Edit User';
+        const url = isEdit ? `http://localhost:4000/api/users/${editingUser.id}` : 'http://localhost:4000/api/users';
+        const method = isEdit ? 'PUT' : 'POST';
+        
+        const res = await fetch(url, {
+           method,
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify(form)
+        }).then(r => r.json());
+
+        if (res.error) throw new Error(res.error);
+        
+        setShowModal(false);
+        fetchTabData();
+        alert(`User ${isEdit ? 'Updated' : 'Created'} Successfully!`);
+     } catch (err) {
+        alert("Operation failed: " + err.message);
+     }
+     setLoading(false);
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setLoading(true);
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const res = await fetch('http://localhost:4000/api/system/upload', {
+        method: 'POST',
+        body: formData,
+      }).then(r => r.json());
+
+      if (res.url) {
+        setForm({ ...form, profileimageurl: res.url });
+        alert('Image uploaded successfully!');
+      }
+    } catch (err) {
+      alert('Upload failed');
+    }
+    setLoading(false);
+  };
+
+  const menuItems = {
+    users: { icon: <Users size={18}/>, subs: ['Browse users', 'Add user'] },
+    courses: { icon: <BookOpen size={18}/>, subs: ['Manage courses', 'Categories', 'Add course'] },
+    permissions: { icon: <ShieldCheck size={18}/>, subs: ['Define roles', 'Assign system roles'] },
+  };
+
+  return (
+    <div className="w-full h-[calc(100vh-80px)] flex overflow-hidden bg-background text-main">
+      
+      {/* MASTER SIDEBAR */}
+      <div className="w-80 flex-shrink-0 bg-surface border-r border-glass-border flex flex-col">
+         <div className="p-8 border-b border-glass-border">
+            <h1 className="text-2xl font-black italic uppercase tracking-tighter">Site<br/><span className="text-primary not-italic">Admin</span></h1>
+         </div>
+         <nav className="flex-grow p-6 space-y-4">
+            {Object.entries(menuItems).map(([key, item]) => (
+              <div key={key}>
+                 <button onClick={() => { setMainTab(key); setSubTab(item.subs[0]); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-black uppercase text-[10px] tracking-widest ${mainTab === key ? 'bg-primary text-white shadow-2xl shadow-primary/20' : 'text-muted hover:bg-white/5'}`}>{item.icon} {key}</button>
+                 {mainTab === key && (
+                   <div className="ml-9 mt-2 space-y-1 py-1 border-l border-glass-border animate-in slide-in-from-left-2 transition-all duration-300">
+                      {item.subs.map(sub => (<button key={sub} onClick={() => { setSubTab(sub); if(sub === 'Add user') setShowModal('Add User'); }} className={`w-full text-left px-5 py-2.5 text-[11px] font-bold transition-all ${subTab === sub ? 'text-primary' : 'text-muted hover:text-main'}`}>{sub}</button>))}
+                   </div>
+                 )}
+              </div>
+            ))}
+         </nav>
+      </div>
+
+      <div className="flex-grow flex flex-col min-w-0">
+         <div className="h-24 bg-surface/50 border-b border-glass-border px-10 flex items-center justify-between backdrop-blur-xl">
+            <h2 className="text-xl font-black italic tracking-tight uppercase">{subTab}</h2>
+            {loading && <Loader2 className="animate-spin text-primary" size={20}/>}
+         </div>
+
+         <div className="flex-grow overflow-y-auto p-12 custom-scrollbar">
+            {subTab === 'Browse users' && (
+              <div className="space-y-8 animate-in fade-in duration-500">
+                 <div className="flex justify-between items-center bg-surface/40 p-6 rounded-[32px] border border-glass-border backdrop-blur-md">
+                    <button onClick={() => {setForm({
+                      username: '', auth: 'manual', suspended: false, generatepass: false, password: '', forcechange: false,
+                      firstname: '', lastname: '', email: '', visibility: '1', city: '', country: 'IN', timezone: '99', lang: 'en',
+                      description: '', idnumber: '', institution: '', department: '', phone1: '', phone2: '', address: '',
+                      profileimageurl: ''
+                    }); setShowModal('Add User');}} className="bg-primary text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-all">Add a new user</button>
+                    <div className="flex gap-4 items-center">
+                        <button className="bg-white/5 border border-glass-border px-6 py-4 rounded-2xl flex items-center gap-2 text-[10px] font-black uppercase text-muted hover:text-main transition-all"><Filter size={16}/> Filters</button>
+                        <div className="relative w-80"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" size={16}/><input className="academy-input w-full pl-14 h-12 bg-background/30" placeholder="Search accounts..." /></div>
+                    </div>
+                 </div>
+
+                 <div className="academy-card overflow-hidden text-[11px]">
+                    <table className="w-full text-left border-collapse">
+                       <thead>
+                          <tr className="border-b border-glass-border bg-white/5 uppercase text-[9px] font-black tracking-[0.2em] text-primary/60">
+                             <th className="p-6">Name / Surname</th>
+                             <th className="p-6">Email address</th>
+                             <th className="p-6">Last access</th>
+                             <th className="p-6 w-20"></th>
+                          </tr>
+                       </thead>
+                       <tbody className="divide-y divide-glass-border text-xs font-bold">
+                          {data.users?.map(u => (
+                             <tr key={u.id} className="hover:bg-white/5 transition-colors group relative">
+                                <td className="p-6 flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black italic overflow-hidden">{u.profileimageurl ? <img src={u.profileimageurl} className="w-full h-full object-cover" /> : u.firstname?.[0]}</div><span className="text-primary hover:underline cursor-pointer">{u.fullname}</span></td>
+                                <td className="p-6 text-muted font-medium uppercase tracking-tighter">{u.email}</td>
+                                <td className="p-6 text-muted italic opacity-50">Never</td>
+                                <td className="p-6 text-right relative">
+                                   <button onClick={() => setActiveMenu(activeMenu === u.id ? null : u.id)} className="p-3 hover:bg-white/10 rounded-xl transition-all"><MoreVertical size={18} className="text-muted"/></button>
+                                   {activeMenu === u.id && (
+                                     <div className="absolute right-16 top-1/2 -translate-y-1/2 z-50 bg-background border border-glass-border shadow-2xl rounded-2xl w-44 overflow-hidden animate-in zoom-in-95 duration-200">
+                                        <button onClick={() => {setShowModal('Edit User'); setEditingUser(u); setForm({...form, ...u}); setActiveMenu(null);}} className="w-full px-6 py-4 flex items-center gap-4 text-[9px] font-black uppercase tracking-widest hover:bg-primary transition-all text-left text-muted hover:text-white"><Edit2 size={14}/> Edit profile</button>
+                                     </div>
+                                   )}
+                                </td>
+                             </tr>
+                          ))}
+                       </tbody>
+                    </table>
+                 </div>
+              </div>
+            )}
+         </div>
+      </div>
+
+      {/* ── HIGH-DENSITY PROFESSIONAL USER PORTAL ──────────────── */}
+      {showModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-8 bg-black/80 backdrop-blur-2xl animate-in fade-in duration-300">
+           <div className="bg-surface w-full max-w-6xl border border-glass-border rounded-[48px] shadow-3xl flex h-[85vh] overflow-hidden">
+              
+              <div className="w-72 bg-white/5 border-r border-glass-border flex flex-col p-8">
+                 <div className="mb-10 text-primary"><UserPlus size={40}/></div>
+                 <h3 className="text-xl font-black italic uppercase mb-8">{showModal}</h3>
+                 <nav className="space-y-2">
+                    <ModalNav active={modalSection === 'general'} icon={<ScrollText size={16}/>} label="General" onClick={() => setModalSection('general')} />
+                    <ModalNav active={modalSection === 'userpicture'} icon={<Camera size={16}/>} label="User Picture" onClick={() => setModalSection('userpicture')} />
+                    <ModalNav active={modalSection === 'optional'} icon={<LayoutGrid size={16}/>} label="Institutional" onClick={() => setModalSection('optional')} />
+                 </nav>
+              </div>
+
+              <div className="flex-grow flex flex-col min-w-0 relative bg-background/20">
+                 <button onClick={() => setShowModal(false)} className="absolute right-8 top-8 p-3 bg-white/5 rounded-2xl hover:bg-red-500 hover:text-white transition-all z-10 focus:outline-none"><X size={24}/></button>
+
+                 <div className="flex-grow overflow-y-auto p-12 custom-scrollbar">
+                    {modalSection === 'general' && (
+                       <div className="space-y-10 animate-in fade-in duration-500">
+                          <div className="grid grid-cols-3 gap-8 p-8 bg-white/5 rounded-[32px] border border-glass-border hover:border-primary/20 transition-all">
+                             <CompactInput label="Username" value={form.username} onChange={v => setForm({...form, username: v})} req />
+                             <CompactSelect label="Auth Method" value={form.auth} options={[{v:'manual', l:'Manual accounts'}]} />
+                             <CompactInput label="Password" type="password" value={form.password} onChange={v => setForm({...form, password: v})} />
+                          </div>
+
+                          <div className="flex items-center gap-12 bg-primary/5 p-6 rounded-2xl border border-primary/10">
+                             <CompactToggle label="Suspended" checked={form.suspended} onChange={v => setForm({...form, suspended: v})} />
+                             <CompactToggle label="Force Pass Change" checked={form.forcechange} onChange={v => setForm({...form, forcechange: v})} />
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-8">
+                             <CompactInput label="First name" req value={form.firstname} onChange={v => setForm({...form, firstname: v})} />
+                             <CompactInput label="Last name" req value={form.lastname} onChange={v => setForm({...form, lastname: v})} />
+                             <CompactInput label="Email address" req value={form.email} onChange={v => setForm({...form, email: v})} />
+                          </div>
+
+                          <div className="grid grid-cols-4 gap-6">
+                             <CompactInput label="City" value={form.city} onChange={v => setForm({...form, city: v})} />
+                             <CompactSelect label="Country" value={form.country} options={[{v:'IN', l:'India'}, {v:'US', l:'USA'}]} onChange={v => setForm({...form, country: v})} />
+                             <CompactSelect label="Timezone" value={form.timezone} options={[{v:'99', l:'Server time'}]} />
+                             <CompactSelect label="Language" value={form.lang} options={[{v:'en', l:'English'}]} />
+                          </div>
+                       </div>
+                    )}
+
+                    {modalSection === 'userpicture' && (
+                       <div className="h-full flex flex-col justify-center items-center gap-10">
+                          <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
+                          <div onClick={() => fileInputRef.current.click()} className="w-56 h-56 rounded-[48px] border-4 border-dashed border-glass-border bg-white/5 flex flex-col items-center justify-center group hover:border-primary transition-all cursor-pointer overflow-hidden">
+                             {form.profileimageurl ? (
+                               <img src={form.profileimageurl} className="w-full h-full object-cover" />
+                             ) : (
+                               <>
+                                 <Camera size={48} className="text-muted group-hover:text-primary transition-colors"/>
+                                 <p className="text-[10px] font-black text-muted uppercase tracking-widest mt-6">Upload Portrait</p>
+                               </>
+                             )}
+                          </div>
+                          {form.profileimageurl && <button onClick={() => setForm({...form, profileimageurl: ''})} className="text-xs font-black text-red-500 uppercase tracking-widest hover:underline">Remove Picture</button>}
+                       </div>
+                    )}
+
+                    {modalSection === 'optional' && (
+                       <div className="grid grid-cols-3 gap-8 animate-in slide-in-from-bottom-4 duration-500">
+                          <CompactInput label="ID number" value={form.idnumber} onChange={v => setForm({...form, idnumber: v})} icon={<Lock size={12}/>} />
+                          <CompactInput label="Institution" value={form.institution} onChange={v => setForm({...form, institution: v})} icon={<Building2 size={12}/>} />
+                          <CompactInput label="Department" value={form.department} onChange={v => setForm({...form, department: v})} icon={<Tag size={12}/>} />
+                          <CompactInput label="Phone" value={form.phone1} onChange={v => setForm({...form, phone1: v})} icon={<Phone size={12}/>} />
+                          <CompactInput label="Mobile" value={form.phone2} onChange={v => setForm({...form, phone2: v})} icon={<Smartphone size={12}/>} />
+                          <CompactInput label="Address" value={form.address} onChange={v => setForm({...form, address: v})} icon={<Home size={12}/>} />
+                       </div>
+                    )}
+                 </div>
+
+                 <div className="p-10 border-t border-glass-border flex gap-6 bg-white/5 items-center justify-end px-12">
+                    <p className="mr-auto text-[9px] font-black text-primary uppercase tracking-[0.3em]">Validation Status: Safe to Commit</p>
+                    <button onClick={handleInitialize} className="bg-primary text-white px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all"> {showModal === 'Edit User' ? 'Update User' : 'Initialize account'} </button>
+                    <button onClick={() => setShowModal(false)} className="bg-white/5 px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-widest text-muted hover:bg-glass-border transition-all">Cancel</button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModalNav({ active, icon, label, onClick }) {
+  return (
+    <button onClick={onClick} className={`w-full flex items-center gap-4 px-5 py-4 rounded-3xl transition-all font-black uppercase text-[10px] tracking-widest ${active ? 'bg-primary text-white' : 'text-muted hover:bg-white/5'}`}>{icon} {label}</button>
+  );
+}
+
+function CompactInput({ label, type='text', value, onChange, req, icon }) {
+  return (
+    <div className="space-y-3 flex-grow">
+       <div className="flex items-center gap-2">
+          {icon} <span className="text-[9px] font-black uppercase text-muted tracking-widest">{label} {req && <span className="text-red-500 text-lg leading-none">*</span>}</span>
+       </div>
+       <input type={type} value={value} onChange={e => onChange(e.target.value)} className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 text-xs font-bold focus:border-primary transition-all outline-none" placeholder={`Enter ${label.toLowerCase()}...`} />
+    </div>
+  );
+}
+
+function CompactSelect({ label, value, options, onChange, icon }) {
+  return (
+    <div className="space-y-3 flex-grow">
+       <div className="flex items-center gap-2">
+          {icon} <span className="text-[9px] font-black uppercase text-muted tracking-widest">{label}</span>
+       </div>
+       <div className="relative">
+          <select value={value} onChange={e => onChange?.(e.target.value)} className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 pr-12 text-xs font-bold appearance-none focus:border-primary transition-all outline-none">
+             {options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+          </select>
+          <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={14}/>
+       </div>
+    </div>
+  );
+}
+
+function CompactToggle({ label, checked, onChange }) {
+  return (
+    <button onClick={() => onChange?.(!checked)} className="flex items-center gap-4 group">
+       <div className={`w-12 h-6 rounded-full transition-all duration-300 relative ${checked ? 'bg-primary' : 'bg-white/10'}`}>
+          <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 ${checked ? 'left-7' : 'left-1'}`} />
+       </div>
+       <span className="text-[9px] font-black uppercase tracking-widest text-muted group-hover:text-primary transition-colors">{label}</span>
+    </button>
+  );
+}
