@@ -38,3 +38,4 @@ desktop.ini
 # Project specific
 node-api/uploads/
 moodle/config.php
+moodle/public/config.php
