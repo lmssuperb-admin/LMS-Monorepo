@@ -2,8 +2,7 @@ const axios = require('axios');
 require('dotenv').config();
 
 // 🛑 PASTE YOUR MANUAL TOKEN HERE
-const moodleToken = '10a6555e0566465cf68f9099d522fe7f';
-
+const moodleToken = process.env.MOODLE_WS_TOKEN || '10a6555e0566465cf68f9099d522fe7f';
 const moodleUrl = process.env.MOODLE_URL || 'http://moodle.test';
 
 async function testToken() {
