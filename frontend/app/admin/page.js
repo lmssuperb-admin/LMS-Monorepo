@@ -18,6 +18,12 @@ export default function MasterAdminConsole() {
   const [activeMenu, setActiveMenu] = useState(null);
   const [modalSection, setModalSection] = useState('general');
   const fileInputRef = useRef(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilters, setActiveFilters] = useState(['name', 'email']);
+  const [filterByRole, setFilterByRole] = useState('all'); 
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   
   const [form, setForm] = useState({
     username: '', auth: 'manual', suspended: false, generatepass: false, password: '', forcechange: false,
@@ -29,6 +35,32 @@ export default function MasterAdminConsole() {
   useEffect(() => {
     fetchTabData();
   }, [mainTab, subTab]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterByRole, activeFilters]);
+
+  const filteredUsers = data.users?.filter(u => {
+    // 1. Role Category Filter
+    if (filterByRole !== 'all' && u.role !== filterByRole) return false;
+
+    // 2. Text Search Filter
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    const searchInName = activeFilters.includes('name') && (u.fullname?.toLowerCase().includes(query) || u.firstname?.toLowerCase().includes(query) || u.lastname?.toLowerCase().includes(query));
+    const searchInEmail = activeFilters.includes('email') && u.email?.toLowerCase().includes(query);
+    const searchInRole = activeFilters.includes('role') && u.role?.toLowerCase().includes(query);
+    
+    // If no specific search fields active, default to globally searching name/email
+    if (activeFilters.length === 0) return searchInName || searchInEmail;
+
+    return searchInName || searchInEmail || searchInRole;
+  });
+
+  const totalUsers = filteredUsers?.length || 0;
+  const totalPages = Math.ceil(totalUsers / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedUsers = filteredUsers?.slice(startIndex, startIndex + itemsPerPage);
 
   const fetchTabData = async () => {
     setLoading(true);
@@ -145,8 +177,61 @@ export default function MasterAdminConsole() {
                       profileimageurl: ''
                     }); setShowModal('Add User');}} className="bg-primary text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-all">Add a new user</button>
                     <div className="flex gap-4 items-center">
-                        <button className="bg-white/5 border border-glass-border px-6 py-4 rounded-2xl flex items-center gap-2 text-[10px] font-black uppercase text-muted hover:text-main transition-all"><Filter size={16}/> Filters</button>
-                        <div className="relative w-80"><Search className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" size={16}/><input className="academy-input w-full pl-14 h-12 bg-background/30" placeholder="Search accounts..." /></div>
+                        <div className="relative">
+                           <button 
+                             onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                             className={`bg-white/5 border border-glass-border px-6 py-4 rounded-2xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${showFilterDropdown ? 'text-primary border-primary/50' : 'text-muted hover:text-main'}`}
+                           >
+                              <Filter size={16}/> Filter By: {activeFilters.length}
+                           </button>
+                           {showFilterDropdown && (
+                             <div className="absolute right-0 mt-3 w-64 bg-surface border border-glass-border rounded-[24px] shadow-3xl z-[100] p-6 space-y-6 animate-in zoom-in-95 duration-200">
+                                <div>
+                                   <p className="text-[10px] font-black uppercase text-primary mb-4 tracking-widest px-1">Search Fields</p>
+                                   <div className="space-y-1">
+                                      {['name', 'email', 'role'].map(f => (
+                                         <label key={f} className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-xl cursor-pointer group">
+                                            <input 
+                                              type="checkbox" 
+                                              checked={activeFilters.includes(f)}
+                                              onChange={() => {
+                                                if (activeFilters.includes(f)) setActiveFilters(activeFilters.filter(x => x !== f));
+                                                else setActiveFilters([...activeFilters, f]);
+                                              }}
+                                              className="w-4 h-4 accent-primary" 
+                                            />
+                                            <span className={`text-[9px] font-black uppercase tracking-widest transition-colors ${activeFilters.includes(f) ? 'text-primary' : 'text-muted group-hover:text-main'}`}>{f}</span>
+                                         </label>
+                                      ))}
+                                   </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-glass-border">
+                                   <p className="text-[10px] font-black uppercase text-primary mb-4 tracking-widest px-1">Filter by Role</p>
+                                   <div className="grid grid-cols-1 gap-1">
+                                      {['all', 'admin', 'teacher', 'student'].map(r => (
+                                         <button 
+                                           key={r}
+                                           onClick={() => setFilterByRole(r)}
+                                           className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterByRole === r ? 'bg-primary text-white' : 'text-muted hover:bg-white/5'}`}
+                                         >
+                                            {r}
+                                         </button>
+                                      ))}
+                                   </div>
+                                </div>
+                             </div>
+                           )}
+                        </div>
+                        <div className="relative w-80">
+                           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" size={16}/>
+                           <input 
+                             value={searchQuery}
+                             onChange={(e) => setSearchQuery(e.target.value)}
+                             className="academy-input w-full pl-14 h-12 bg-background/30" 
+                             placeholder="Search users..." 
+                           />
+                        </div>
                     </div>
                  </div>
 
@@ -156,16 +241,31 @@ export default function MasterAdminConsole() {
                           <tr className="border-b border-glass-border bg-white/5 uppercase text-[9px] font-black tracking-[0.2em] text-primary/60">
                              <th className="p-6">Name / Surname</th>
                              <th className="p-6">Email address</th>
+                             <th className="p-6">Role</th>
                              <th className="p-6">Last access</th>
                              <th className="p-6 w-20"></th>
                           </tr>
                        </thead>
                        <tbody className="divide-y divide-glass-border text-xs font-bold">
-                          {data.users?.map(u => (
+                          {paginatedUsers?.map(u => (
                              <tr key={u.id} className="hover:bg-white/5 transition-colors group relative">
                                 <td className="p-6 flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black italic overflow-hidden">{u.profileimageurl ? <img src={u.profileimageurl} className="w-full h-full object-cover" /> : u.firstname?.[0]}</div><span className="text-primary hover:underline cursor-pointer">{u.fullname}</span></td>
                                 <td className="p-6 text-muted font-medium uppercase tracking-tighter">{u.email}</td>
-                                <td className="p-6 text-muted italic opacity-50">Never</td>
+                                <td className="p-6">
+                                   <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                                      u.role === 'admin' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 
+                                      u.role === 'teacher' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' : 
+                                      'bg-primary/10 text-primary border border-primary/20'
+                                   }`}>
+                                      {u.role || 'student'}
+                                   </span>
+                                </td>
+                                <td className="p-6 text-muted font-medium">
+                                    {u.lastaccess ? new Date(u.lastaccess * 1000).toLocaleString('en-US', { 
+                                       day: '2-digit', month: 'short', year: 'numeric', 
+                                       hour: '2-digit', minute: '2-digit', hour12: true 
+                                    }) : 'Never logged in'}
+                                 </td>
                                 <td className="p-6 text-right relative">
                                    <button onClick={() => setActiveMenu(activeMenu === u.id ? null : u.id)} className="p-3 hover:bg-white/10 rounded-xl transition-all"><MoreVertical size={18} className="text-muted"/></button>
                                    {activeMenu === u.id && (
@@ -178,7 +278,64 @@ export default function MasterAdminConsole() {
                           ))}
                        </tbody>
                     </table>
-                 </div>
+                  </div>
+                  
+                  {/* PAGINATION CONTROLS */}
+                  <div className="flex flex-col md:flex-row justify-between items-center gap-6 px-4 py-4">
+                     <div className="flex items-center gap-4 bg-surface/40 px-6 py-3 rounded-2xl border border-glass-border">
+                        <span className="text-[10px] font-black uppercase text-muted tracking-widest whitespace-nowrap">Show</span>
+                        <select 
+                          value={itemsPerPage} 
+                          onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                          className="bg-transparent text-[10px] font-black uppercase text-primary outline-none cursor-pointer"
+                        >
+                           {[5, 10, 25, 50].map(v => <option key={v} value={v} className="bg-surface">{v}</option>)}
+                        </select>
+                        <span className="text-[10px] font-black uppercase text-muted tracking-widest whitespace-nowrap">per page</span>
+                     </div>
+
+                     <div className="flex items-center gap-2">
+                        <button 
+                          disabled={currentPage === 1}
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          className="w-12 h-12 flex items-center justify-center rounded-2xl bg-surface/40 border border-glass-border text-muted hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                           <ChevronDown className="rotate-90" size={18}/>
+                        </button>
+                        
+                        <div className="flex items-center gap-2 bg-surface/40 px-3 py-2 rounded-2xl border border-glass-border">
+                           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                              let pageNum;
+                              if (totalPages <= 5) pageNum = i + 1;
+                              else if (currentPage <= 3) pageNum = i + 1;
+                              else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                              else pageNum = currentPage - 2 + i;
+
+                              return (
+                                 <button 
+                                   key={pageNum}
+                                   onClick={() => setCurrentPage(pageNum)}
+                                   className={`w-8 h-8 flex items-center justify-center rounded-xl text-[10px] font-black transition-all ${currentPage === pageNum ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted hover:text-main hover:bg-white/5'}`}
+                                 >
+                                    {pageNum}
+                                 </button>
+                              );
+                           })}
+                        </div>
+
+                        <button 
+                          disabled={currentPage === totalPages || totalPages === 0}
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          className="w-12 h-12 flex items-center justify-center rounded-2xl bg-surface/40 border border-glass-border text-muted hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                        >
+                           <ChevronDown className="-rotate-90" size={18}/>
+                        </button>
+                     </div>
+
+                     <div className="text-[10px] font-black uppercase text-muted tracking-widest bg-surface/40 px-6 py-3 rounded-2xl border border-glass-border">
+                        Showing <span className="text-primary">{Math.min(startIndex + 1, totalUsers)}</span> to <span className="text-primary">{Math.min(startIndex + itemsPerPage, totalUsers)}</span> of <span className="text-primary">{totalUsers}</span> accounts
+                     </div>
+                  </div>
               </div>
             )}
          </div>

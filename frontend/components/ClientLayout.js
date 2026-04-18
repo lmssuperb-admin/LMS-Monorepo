@@ -16,7 +16,7 @@ import {
 export default function ClientLayout({ children }) {
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
-  const hideGlobalUI = isLoginPage; // Only hide on login page
+  const hideGlobalUI = isLoginPage; 
 
   return (
     <SessionProvider>
@@ -28,7 +28,7 @@ export default function ClientLayout({ children }) {
             {children}
           </main>
           
-          {!hideGlobalUI && <CommandBar />}
+          {!hideGlobalUI && !(pathname?.startsWith('/admin')) && <CommandBar />}
         </div>
       </ThemeProvider>
     </SessionProvider>

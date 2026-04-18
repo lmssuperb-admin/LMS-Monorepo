@@ -58,6 +58,18 @@ router.post('/login', async (req, res, next) => {
     }
     
     const userInfo = await moodleService.request('core_webservice_get_site_info', { wstoken: userToken });
+    
+    // ⚡ FORCE LASTACCESS UPDATE: Moodle doesn't update lastaccess for WS logins by default.
+    // Calling core_user_view_user simulates activity and forces Moodle to update the timestamp.
+    try {
+      await moodleService.request('core_user_view_user', { 
+        userid: userInfo.userid, 
+        courseid: 1 // Site home
+      }, userToken); 
+    } catch (vErr) {
+      // Silently fail if this specific logging fails, don't block login
+      console.log('⚠️ Could not force lastaccess update:', vErr.message);
+    }
 
     res.json({
       success: true,

@@ -127,10 +127,18 @@ class MoodleService {
   async getUsers() { 
     try {
       const data = await this.request('core_user_get_users', { criteria: [{ key: 'email', value: '%%' }] });
-      return data.users || [];
+      const users = data.users || [];
+      return users.map(u => ({
+        ...u,
+        role: u.siteadmin === 1 ? 'admin' : 'student' // Defaulting students if not admin
+      }));
     } catch (err) {
       const data = await this.request('core_user_get_users', { criteria: [] });
-      return data.users || [];
+      const users = data.users || [];
+      return users.map(u => ({
+        ...u,
+        role: u.siteadmin === 1 ? 'admin' : 'student'
+      }));
     }
   }
   async getCourses() { return this.request('core_course_get_courses'); }
