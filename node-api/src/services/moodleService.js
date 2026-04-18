@@ -8,16 +8,45 @@ class MoodleService {
   }
 
   async request(wsfunction, params = {}) {
+    const fullParams = { wstoken: this.token, wsfunction: wsfunction, moodlewsrestformat: 'json', ...params };
+    console.log(`📡 [MOODLE] Call: ${wsfunction}`);
+    // console.log('DEBUG PARAMS:', JSON.stringify(fullParams)); // Uncomment for extreme debugging
+
     try {
       const response = await axios({
         method: 'post',
         url: this.restEndpoint,
-        params: { wstoken: this.token, wsfunction: wsfunction, moodlewsrestformat: 'json', ...params },
+        params: fullParams,
       });
-      if (response.data && response.data.exception) throw new Error(response.data.message);
-      return response.data;
+      
+      const data = response.data;
+
+      // Handle Moodle errors (Moodle returns 200 OK even for errors)
+      if (data && (data.exception || data.errorcode || data.error)) {
+        let msg = data.message || data.errorcode || data.error || 'Unknown Moodle Error';
+        
+        // Clean up Moodle's HTML-heavy error messages
+        msg = msg.replace(/^error\//, '');
+        msg = msg.replace(/<[^>]*>/g, '');
+        
+        console.error(`❌ Moodle API [${wsfunction}] REJECTED:`, msg);
+        throw new Error(msg);
+      }
+      
+      // core_user_create_users returns an array, check if it contains error items
+      if (Array.isArray(data) && data.length > 0 && data[0].errorcode) {
+         let msg = data[0].message || data[0].errorcode;
+         msg = msg.replace(/^error\//, '');
+         msg = msg.replace(/<[^>]*>/g, '');
+         console.error(`❌ Moodle API [${wsfunction}] ITEM ERROR:`, msg);
+         throw new Error(msg);
+      }
+
+      return data;
     } catch (error) {
-      console.error(`❌ Moodle API [${wsfunction}]:`, error.message);
+      if (!error.message.includes('Moodle API')) {
+         console.error(`❌ Moodle Request Failed [${wsfunction}]:`, error.message);
+      }
       throw error;
     }
   }
@@ -26,11 +55,11 @@ class MoodleService {
   async createUser(u) {
     return this.request('core_user_create_users', {
       users: [{
-        username: u.username.toLowerCase(),
+        username: (u.username || '').toLowerCase().trim(),
         password: u.password,
-        firstname: u.firstname,
-        lastname: u.lastname,
-        email: u.email,
+        firstname: (u.firstname || '').trim(),
+        lastname: (u.lastname || '').trim(),
+        email: (u.email || '').toLowerCase().trim(),
         auth: u.auth || 'manual',
         idnumber: u.idnumber || '',
         institution: u.institution || '',
@@ -39,12 +68,13 @@ class MoodleService {
         phone2: u.phone2 || '',
         address: u.address || '',
         city: u.city || '',
-        country: u.country || 'US',
+        country: (u.country || 'US').toUpperCase().trim(),
         lang: u.lang || 'en',
         description: u.description || '',
-        preferences: [
-           { name: 'auth_forcepasswordchange', value: u.forcepasswordchange ? '1' : '0' }
-        ]
+        suspended: u.suspended ? 1 : 0,
+        preferences: u.forcechange ? [
+           { name: 'auth_forcepasswordchange', value: '1' }
+        ] : []
       }]
     });
   }
@@ -53,11 +83,11 @@ class MoodleService {
     return this.request('core_user_update_users', {
       users: [{
         id: u.id,
-        username: u.username?.toLowerCase(),
+        username: u.username ? u.username.toLowerCase().trim() : undefined,
         password: u.password || undefined,
-        firstname: u.firstname,
-        lastname: u.lastname,
-        email: u.email,
+        firstname: u.firstname ? u.firstname.trim() : undefined,
+        lastname: u.lastname ? u.lastname.trim() : undefined,
+        email: u.email ? u.email.toLowerCase().trim() : undefined,
         idnumber: u.idnumber || '',
         institution: u.institution || '',
         department: u.department || '',
@@ -65,8 +95,9 @@ class MoodleService {
         phone2: u.phone2 || '',
         address: u.address || '',
         city: u.city || '',
-        country: u.country || 'US',
-        description: u.description || ''
+        country: u.country ? u.country.toUpperCase().trim() : 'US',
+        description: u.description || '',
+        suspended: u.suspended !== undefined ? (u.suspended ? 1 : 0) : undefined
       }]
     });
   }

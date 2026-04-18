@@ -40,7 +40,13 @@ router.post('/login', async (req, res, next) => {
       const tokenResponse = await axios.get(targetUrl, {
         params: { username, password, service: 'moodle_mobile_app' }
       });
-      if (!tokenResponse.data.error) {
+      
+      if (tokenResponse.data.error) {
+        if (tokenResponse.data.error.includes('suspended')) {
+           return res.status(403).json({ success: false, error: 'Your account is suspended. Please contact the administrator.' });
+        }
+        // console.log('Login Error:', tokenResponse.data.error);
+      } else {
         userToken = tokenResponse.data.token;
       }
     } catch (e) {
@@ -48,7 +54,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     if (!userToken) {
-      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+      return res.status(401).json({ success: false, error: 'Invalid credentials or suspended account' });
     }
     
     const userInfo = await moodleService.request('core_webservice_get_site_info', { wstoken: userToken });
