@@ -11,7 +11,7 @@ import {
 export default function MasterAdminConsole() {
   const [mainTab, setMainTab] = useState('users'); 
   const [subTab, setSubTab] = useState('Browse users');
-  const [data, setData] = useState({ users: [], courses: [], categories: [], cohorts: [], roles: [] });
+  const [data, setData] = useState({ users: [], courses: [], categories: [], cohorts: [], roles: [], systemAssignments: [] });
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -24,12 +24,13 @@ export default function MasterAdminConsole() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [roleForm, setRoleForm] = useState({ userid: '', roleid: '', contextlevel: 'system', instanceid: 0 });
   
   const [form, setForm] = useState({
     username: '', auth: 'manual', suspended: false, generatepass: false, password: '', forcechange: false,
     firstname: '', lastname: '', email: '', visibility: '1', city: '', country: 'IN', timezone: '99', lang: 'en',
     description: '', idnumber: '', institution: '', department: '', phone1: '', phone2: '', address: '',
-    profileimageurl: ''
+    profileimageurl: '', roleid: ''
   });
 
   useEffect(() => {
@@ -63,26 +64,76 @@ export default function MasterAdminConsole() {
   const paginatedUsers = filteredUsers?.slice(startIndex, startIndex + itemsPerPage);
 
   const fetchTabData = async () => {
+    // 🧠 Abort previous fetch if still running
+    if (window.fetchController) window.fetchController.abort();
+    window.fetchController = new AbortController();
+    const { signal } = window.fetchController;
+
     setLoading(true);
     try {
-      let endpoint = subTab === 'Browse users' ? 'users' : 'courses';
+      let endpoint = '';
+      if (subTab === 'Browse users') endpoint = 'users';
+      else if (subTab === 'Manage courses') endpoint = 'courses';
+      else if (subTab === 'Define roles' || subTab === 'Assign system roles') endpoint = 'roles';
+
       if (endpoint) {
-        const res = await fetch(`http://localhost:4000/api/${endpoint}`).then(r => r.json());
-        
-        let actualData = [];
-        if (Array.isArray(res)) {
-          actualData = res;
-        } else if (res && res.users && Array.isArray(res.users)) {
-          actualData = res.users;
-        } else if (res && Array.isArray(res.courses)) {
-          actualData = res.courses;
-        }
-        
+        const res = await fetch(`http://localhost:4000/api/${endpoint}`, { signal }).then(r => r.json());
+        let actualData = Array.isArray(res) ? res : (res.users || res.courses || res.roles || []);
         setData(prev => ({ ...prev, [endpoint]: actualData }));
       }
-    } catch (err) { console.error(err); }
+
+      if (subTab === 'Assign system roles') {
+        // Fetch dependencies in parallel but Await them
+        const [usersRes, assignRes] = await Promise.all([
+          data.users.length === 0 ? fetch(`http://localhost:4000/api/users`, { signal }).then(r => r.json()) : Promise.resolve(null),
+          fetch(`http://localhost:4000/api/roles/assignments?contextid=1`, { signal }).then(r => r.json())
+        ]);
+
+        setData(prev => ({ 
+          ...prev, 
+          users: usersRes?.users || prev.users,
+          systemAssignments: Array.isArray(assignRes) ? assignRes : prev.systemAssignments 
+        }));
+      }
+    } catch (err) { 
+      if (err.name !== 'AbortError') console.error('Fetch error:', err); 
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAssignRole = async () => {
+    setLoading(true);
+    try {
+      if (!roleForm.userid || !roleForm.roleid) throw new Error("Please select both a user and a role");
+      const res = await fetch('http://localhost:4000/api/roles/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(roleForm)
+      }).then(r => r.json());
+      if (res && res.error) throw new Error(res.error);
+      alert('Role Assigned Successfully!');
+      setRoleForm({ userid: '', roleid: '', contextlevel: 'system', instanceid: 0 });
+    } catch (err) { alert('Assignment failed: ' + err.message); }
     setLoading(false);
   };
+  const handleUnassignRole = async (userid, roleid) => {
+    if (!confirm('Are you sure you want to revoke this role?')) return;
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:4000/api/roles/unassign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userid, roleid, contextlevel: 'system', instanceid: 0 })
+      }).then(r => r.json());
+      if (res && res.error) throw new Error(res.error);
+      alert('Role Revoked Successfully!');
+      // Refresh assignments
+      fetchTabData();
+    } catch (err) { alert('Revocation failed: ' + err.message); }
+    setLoading(false);
+  };
+
 
   const handleInitialize = async () => {
      setLoading(true);
@@ -168,116 +219,133 @@ export default function MasterAdminConsole() {
 
          <div className="flex-grow overflow-y-auto p-12 custom-scrollbar">
             {subTab === 'Browse users' && (
-              <div className="space-y-8 animate-in fade-in duration-500">
-                 <div className="flex justify-between items-center bg-surface/40 p-6 rounded-[32px] border border-glass-border backdrop-blur-md">
-                    <button onClick={() => {setForm({
-                      username: '', auth: 'manual', suspended: false, generatepass: false, password: '', forcechange: false,
-                      firstname: '', lastname: '', email: '', visibility: '1', city: '', country: 'IN', timezone: '99', lang: 'en',
-                      description: '', idnumber: '', institution: '', department: '', phone1: '', phone2: '', address: '',
-                      profileimageurl: ''
-                    }); setShowModal('Add User');}} className="bg-primary text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-all">Add a new user</button>
-                    <div className="flex gap-4 items-center">
-                        <div className="relative">
-                           <button 
-                             onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                             className={`bg-white/5 border border-glass-border px-6 py-4 rounded-2xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${showFilterDropdown ? 'text-primary border-primary/50' : 'text-muted hover:text-main'}`}
-                           >
-                              <Filter size={16}/> Filter By: {activeFilters.length}
-                           </button>
-                           {showFilterDropdown && (
-                             <div className="absolute right-0 mt-3 w-64 bg-surface border border-glass-border rounded-[24px] shadow-3xl z-[100] p-6 space-y-6 animate-in zoom-in-95 duration-200">
-                                <div>
-                                   <p className="text-[10px] font-black uppercase text-primary mb-4 tracking-widest px-1">Search Fields</p>
-                                   <div className="space-y-1">
-                                      {['name', 'email', 'role'].map(f => (
-                                         <label key={f} className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-xl cursor-pointer group">
-                                            <input 
-                                              type="checkbox" 
-                                              checked={activeFilters.includes(f)}
-                                              onChange={() => {
-                                                if (activeFilters.includes(f)) setActiveFilters(activeFilters.filter(x => x !== f));
-                                                else setActiveFilters([...activeFilters, f]);
-                                              }}
-                                              className="w-4 h-4 accent-primary" 
-                                            />
-                                            <span className={`text-[9px] font-black uppercase tracking-widest transition-colors ${activeFilters.includes(f) ? 'text-primary' : 'text-muted group-hover:text-main'}`}>{f}</span>
-                                         </label>
-                                      ))}
-                                   </div>
-                                </div>
+               <div className="space-y-8 animate-in fade-in duration-500">
+                  <div className="flex justify-between items-center bg-surface/40 p-6 rounded-[32px] border border-glass-border backdrop-blur-md">
+                     <button onClick={() => {
+                        setForm({
+                          username: '', auth: 'manual', suspended: false, generatepass: false, password: '', forcechange: false,
+                          firstname: '', lastname: '', email: '', visibility: '1', city: '', country: 'IN', timezone: '99', lang: 'en',
+                          description: '', idnumber: '', institution: '', department: '', phone1: '', phone2: '', address: '',
+                          profileimageurl: '', roleid: ''
+                        }); 
+                        if (data.roles.length === 0) fetch('http://localhost:4000/api/roles').then(r => r.json()).then(res => {
+                           setData(prev => ({...prev, roles: Array.isArray(res) ? res : (res.roles || [])}));
+                        });
+                        setShowModal('Add User');
+                     }} className="bg-primary text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-all">Add a new user</button>
+                     <div className="flex gap-4 items-center">
+                         <div className="relative">
+                            <button 
+                              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                              className={`bg-white/5 border border-glass-border px-6 py-4 rounded-2xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${showFilterDropdown ? 'text-primary border-primary/50' : 'text-muted hover:text-main'}`}
+                            >
+                               <Filter size={16}/> Filter By: {activeFilters.length}
+                            </button>
+                            {showFilterDropdown && (
+                              <div className="absolute right-0 mt-3 w-64 bg-surface border border-glass-border rounded-[24px] shadow-3xl z-[100] p-6 space-y-6 animate-in zoom-in-95 duration-200">
+                                 <div>
+                                    <p className="text-[10px] font-black uppercase text-primary mb-4 tracking-widest px-1">Search Fields</p>
+                                    <div className="space-y-1">
+                                       {['name', 'email', 'role'].map(f => (
+                                          <label key={f} className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-xl cursor-pointer group">
+                                             <input 
+                                               type="checkbox" 
+                                               checked={activeFilters.includes(f)}
+                                               onChange={() => {
+                                                 if (activeFilters.includes(f)) setActiveFilters(activeFilters.filter(x => x !== f));
+                                                 else setActiveFilters([...activeFilters, f]);
+                                               }}
+                                               className="w-4 h-4 accent-primary" 
+                                             />
+                                             <span className={`text-[9px] font-black uppercase tracking-widest transition-colors ${activeFilters.includes(f) ? 'text-primary' : 'text-muted group-hover:text-main'}`}>{f}</span>
+                                          </label>
+                                       ))}
+                                    </div>
+                                 </div>
 
-                                <div className="pt-2 border-t border-glass-border">
-                                   <p className="text-[10px] font-black uppercase text-primary mb-4 tracking-widest px-1">Filter by Role</p>
-                                   <div className="grid grid-cols-1 gap-1">
-                                      {['all', 'admin', 'teacher', 'student'].map(r => (
-                                         <button 
-                                           key={r}
-                                           onClick={() => setFilterByRole(r)}
-                                           className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterByRole === r ? 'bg-primary text-white' : 'text-muted hover:bg-white/5'}`}
-                                         >
-                                            {r}
-                                         </button>
-                                      ))}
-                                   </div>
-                                </div>
-                             </div>
-                           )}
-                        </div>
-                        <div className="relative w-80">
-                           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" size={16}/>
-                           <input 
-                             value={searchQuery}
-                             onChange={(e) => setSearchQuery(e.target.value)}
-                             className="academy-input w-full pl-14 h-12 bg-background/30" 
-                             placeholder="Search users..." 
-                           />
-                        </div>
-                    </div>
-                 </div>
+                                 <div className="pt-2 border-t border-glass-border">
+                                    <p className="text-[10px] font-black uppercase text-primary mb-4 tracking-widest px-1">Filter by Role</p>
+                                    <div className="grid grid-cols-1 gap-1">
+                                       {['all', 'admin', 'teacher', 'student'].map(r => (
+                                          <button 
+                                            key={r}
+                                            onClick={() => setFilterByRole(r)}
+                                            className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterByRole === r ? 'bg-primary text-white' : 'text-muted hover:bg-white/5'}`}
+                                          >
+                                             {r}
+                                          </button>
+                                       ))}
+                                    </div>
+                                 </div>
+                              </div>
+                            )}
+                         </div>
+                         <div className="relative w-80">
+                            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" size={16}/>
+                            <input 
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              className="academy-input w-full pl-14 h-12 bg-background/30" 
+                              placeholder="Search users..." 
+                            />
+                         </div>
+                     </div>
+                  </div>
 
-                 <div className="academy-card overflow-hidden text-[11px]">
-                    <table className="w-full text-left border-collapse">
-                       <thead>
-                          <tr className="border-b border-glass-border bg-white/5 uppercase text-[9px] font-black tracking-[0.2em] text-primary/60">
-                             <th className="p-6">Name / Surname</th>
-                             <th className="p-6">Email address</th>
-                             <th className="p-6">Role</th>
-                             <th className="p-6">Last access</th>
-                             <th className="p-6 w-20"></th>
-                          </tr>
-                       </thead>
-                       <tbody className="divide-y divide-glass-border text-xs font-bold">
-                          {paginatedUsers?.map(u => (
-                             <tr key={u.id} className="hover:bg-white/5 transition-colors group relative">
-                                <td className="p-6 flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black italic overflow-hidden">{u.profileimageurl ? <img src={u.profileimageurl} className="w-full h-full object-cover" /> : u.firstname?.[0]}</div><span className="text-primary hover:underline cursor-pointer">{u.fullname}</span></td>
-                                <td className="p-6 text-muted font-medium uppercase tracking-tighter">{u.email}</td>
-                                <td className="p-6">
-                                   <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                                      u.role === 'admin' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 
-                                      u.role === 'teacher' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' : 
-                                      'bg-primary/10 text-primary border border-primary/20'
-                                   }`}>
-                                      {u.role || 'student'}
-                                   </span>
-                                </td>
-                                <td className="p-6 text-muted font-medium">
-                                    {u.lastaccess ? new Date(u.lastaccess * 1000).toLocaleString('en-US', { 
-                                       day: '2-digit', month: 'short', year: 'numeric', 
-                                       hour: '2-digit', minute: '2-digit', hour12: true 
-                                    }) : 'Never logged in'}
+                  <div className="academy-card overflow-hidden text-[11px]">
+                     <table className="w-full text-left border-collapse">
+                        <thead>
+                           <tr className="border-b border-glass-border bg-white/5 uppercase text-[9px] font-black tracking-[0.2em] text-primary/60">
+                              <th className="p-6">Name / Surname</th>
+                              <th className="p-6">Email address</th>
+                              <th className="p-6">Role</th>
+                              <th className="p-6">Last access</th>
+                              <th className="p-6 w-20"></th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-glass-border text-xs font-bold">
+                           {paginatedUsers?.map(u => (
+                              <tr key={u.id} className="hover:bg-white/5 transition-colors group relative">
+                                 <td className="p-6 flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black italic overflow-hidden">{u.profileimageurl ? <img src={u.profileimageurl} className="w-full h-full object-cover" /> : u.firstname?.[0]}</div><span className="text-primary hover:underline cursor-pointer">{u.fullname}</span></td>
+                                 <td className="p-6 text-muted font-medium uppercase tracking-tighter">{u.email}</td>
+                                 <td className="p-6">
+                                    <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                                       u.role === 'admin' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 
+                                       u.role === 'teacher' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' : 
+                                       'bg-primary/10 text-primary border border-primary/20'
+                                    }`}>
+                                       {u.role || 'student'}
+                                    </span>
                                  </td>
-                                <td className="p-6 text-right relative">
-                                   <button onClick={() => setActiveMenu(activeMenu === u.id ? null : u.id)} className="p-3 hover:bg-white/10 rounded-xl transition-all"><MoreVertical size={18} className="text-muted"/></button>
-                                   {activeMenu === u.id && (
-                                     <div className="absolute right-16 top-1/2 -translate-y-1/2 z-50 bg-background border border-glass-border shadow-2xl rounded-2xl w-44 overflow-hidden animate-in zoom-in-95 duration-200">
-                                        <button onClick={() => {setShowModal('Edit User'); setEditingUser(u); setForm({...form, ...u}); setActiveMenu(null);}} className="w-full px-6 py-4 flex items-center gap-4 text-[9px] font-black uppercase tracking-widest hover:bg-primary transition-all text-left text-muted hover:text-white"><Edit2 size={14}/> Edit profile</button>
-                                     </div>
-                                   )}
-                                </td>
-                             </tr>
-                          ))}
-                       </tbody>
-                    </table>
+                                 <td className="p-6 text-muted font-medium">
+                                     {u.lastaccess ? new Date(u.lastaccess * 1000).toLocaleString('en-US', { 
+                                        day: '2-digit', month: 'short', year: 'numeric', 
+                                        hour: '2-digit', minute: '2-digit', hour12: true 
+                                     }) : 'Never logged in'}
+                                  </td>
+                                 <td className="p-6 text-right relative">
+                                    <button onClick={() => setActiveMenu(activeMenu === u.id ? null : u.id)} className="p-3 hover:bg-white/10 rounded-xl transition-all"><MoreVertical size={18} className="text-muted"/></button>
+                                    {activeMenu === u.id && (
+                                      <div className="absolute right-16 top-1/2 -translate-y-1/2 z-50 bg-background border border-glass-border shadow-2xl rounded-2xl w-44 overflow-hidden animate-in zoom-in-95 duration-200">
+                                         <button onClick={() => {setShowModal('Edit User'); setEditingUser(u); setForm({...form, ...u}); setActiveMenu(null);}} className="w-full px-6 py-4 flex items-center gap-4 text-[9px] font-black uppercase tracking-widest hover:bg-primary transition-all text-left text-muted hover:text-white"><Edit2 size={14}/> Edit profile</button>
+                                         <button onClick={() => {setMainTab('permissions'); setSubTab('Assign system roles'); setRoleForm({ ...roleForm, userid: u.id }); setActiveMenu(null);}} className="w-full px-6 py-4 flex items-center gap-4 text-[9px] font-black uppercase tracking-widest hover:bg-primary transition-all text-left text-muted hover:text-white"><ShieldCheck size={14}/> Manage Role</button>
+                                      </div>
+                                    )}
+                                 </td>
+                              </tr>
+                           ))}
+                           {paginatedUsers?.length === 0 && (
+                              <tr>
+                                 <td colSpan="5" className="p-20 text-center">
+                                    <div className="flex flex-col items-center gap-4 opacity-30">
+                                       <Search size={48}/>
+                                       <p className="text-[10px] font-black uppercase tracking-[0.2em]">No users match your criteria</p>
+                                    </div>
+                                 </td>
+                              </tr>
+                           )}
+                        </tbody>
+                     </table>
                   </div>
                   
                   {/* PAGINATION CONTROLS */}
@@ -336,7 +404,140 @@ export default function MasterAdminConsole() {
                         Showing <span className="text-primary">{Math.min(startIndex + 1, totalUsers)}</span> to <span className="text-primary">{Math.min(startIndex + itemsPerPage, totalUsers)}</span> of <span className="text-primary">{totalUsers}</span> accounts
                      </div>
                   </div>
-              </div>
+               </div>
+            )}
+
+            {subTab === 'Define roles' && (
+               <div className="space-y-8 animate-in fade-in duration-500">
+                  <div className="academy-card overflow-hidden">
+                     <table className="w-full text-left border-collapse">
+                        <thead>
+                           <tr className="border-b border-glass-border bg-white/5 uppercase text-[9px] font-black tracking-[0.2em] text-primary/60">
+                              <th className="p-6">Role Name</th>
+                              <th className="p-6">Shortname</th>
+                              <th className="p-6">Description</th>
+                              <th className="p-6 text-right">ID</th>
+                           </tr>
+                        </thead>
+                        <tbody className="divide-y divide-glass-border text-xs font-bold">
+                           {data.roles?.map(r => (
+                              <tr key={r.id} className="hover:bg-white/5 transition-colors">
+                                 <td className="p-6 text-primary">{r.name}</td>
+                                 <td className="p-6 text-muted font-medium uppercase tracking-widest text-[10px]">{r.shortname}</td>
+                                 <td className="p-6 text-muted opacity-60 font-medium max-w-md truncate">{r.description || 'No description provided'}</td>
+                                 <td className="p-6 text-muted uppercase text-right">#{r.id}</td>
+                              </tr>
+                           ))}
+                        </tbody>
+                     </table>
+                  </div>
+               </div>
+            )}
+
+            {subTab === 'Assign system roles' && (
+               <div className="max-w-4xl space-y-10 animate-in slide-in-from-bottom-4 duration-500">
+                  <div className="bg-surface/40 p-12 rounded-[48px] border border-glass-border backdrop-blur-md space-y-10 shadow-3xl">
+                     <div className="flex items-center gap-6">
+                        <div className="p-4 bg-primary/10 rounded-3xl text-primary"><ShieldCheck size={32}/></div>
+                        <div>
+                           <h3 className="text-2xl font-black italic uppercase tracking-tight">System Assignment</h3>
+                           <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1">Assign global permissions to users</p>
+                        </div>
+                     </div>
+
+                     <div className="grid grid-cols-2 gap-10">
+                        <div className="space-y-4">
+                           <p className="text-[9px] font-black uppercase text-muted tracking-widest ml-1">Select User</p>
+                           <div className="relative">
+                              <select 
+                                value={roleForm.userid} 
+                                onChange={e => setRoleForm({...roleForm, userid: e.target.value})}
+                                className="academy-input w-full h-16 bg-background/50 border border-glass-border px-6 text-xs font-bold appearance-none focus:border-primary transition-all outline-none rounded-2xl"
+                              >
+                                 <option value="">Choose a user...</option>
+                                 {data.users?.map(u => <option key={u.id} value={u.id}>{u.fullname} ({u.email})</option>)}
+                              </select>
+                              <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={16}/>
+                           </div>
+                        </div>
+
+                        <div className="space-y-4">
+                           <p className="text-[9px] font-black uppercase text-muted tracking-widest ml-1">Select Role</p>
+                           <div className="relative">
+                              <select 
+                                value={roleForm.roleid} 
+                                onChange={e => setRoleForm({...roleForm, roleid: e.target.value})}
+                                className="academy-input w-full h-16 bg-background/50 border border-glass-border px-6 text-xs font-bold appearance-none focus:border-primary transition-all outline-none rounded-2xl"
+                              >
+                                 <option value="">Choose a role...</option>
+                                 {data.roles?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                              </select>
+                              <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={16}/>
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="p-8 bg-primary/5 rounded-[32px] border border-primary/10 flex items-start gap-6">
+                        <Info className="text-primary flex-shrink-0 mt-1" size={20}/>
+                        <p className="text-[11px] font-medium leading-relaxed text-main/80">
+                           Warning: Assigning system roles gives users broad permissions across the entire platform. 
+                           System roles (like Manager or Course Creator) are global. For course-specific teaching roles, 
+                           use the Enrollments area within individual courses.
+                        </p>
+                     </div>
+                     <div className="pt-10 border-t border-glass-border space-y-8">
+                        <div>
+                           <h4 className="text-sm font-black italic uppercase tracking-wider">Current Global Assignments</h4>
+                           <p className="text-[9px] font-bold text-muted uppercase tracking-widest mt-1">Manage existing permissions</p>
+                        </div>
+                        <div className="academy-card overflow-hidden">
+                           <table className="w-full text-left border-collapse text-[10px]">
+                              <thead>
+                                 <tr className="border-b border-glass-border bg-white/5 uppercase text-[8px] font-black tracking-widest text-primary/60">
+                                    <th className="p-6">User</th>
+                                    <th className="p-6">Role</th>
+                                    <th className="p-6 text-right">Actions</th>
+                                 </tr>
+                              </thead>
+                              <tbody className="divide-y divide-glass-border font-bold">
+                                 {data.systemAssignments?.map((a, i) => {
+                                    const user = data.users.find(u => u.id === a.userid);
+                                    const role = data.roles.find(r => r.id === a.roleid);
+                                    return (
+                                       <tr key={i} className="hover:bg-white/5 transition-colors">
+                                          <td className="p-6">
+                                             <div className="flex flex-col">
+                                                <span className="text-main">{user?.fullname || 'Loading...'}</span>
+                                                <span className="text-muted text-[8px]">{user?.email}</span>
+                                             </div>
+                                          </td>
+                                          <td className="p-6">
+                                             <span className="px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full text-[8px] uppercase">{role?.name || a.roleid}</span>
+                                          </td>
+                                          <td className="p-6 text-right">
+                                             <button onClick={() => handleUnassignRole(a.userid, a.roleid)} className="text-red-500 hover:underline uppercase text-[8px] font-black tracking-widest">Revoke</button>
+                                          </td>
+                                       </tr>
+                                    );
+                                 })}
+                                 {(!data.systemAssignments || data.systemAssignments.length === 0) && (
+                                    <tr><td colSpan="3" className="p-10 text-center text-muted uppercase text-[8px] tracking-widest">No global assignments found</td></tr>
+                                 )}
+                              </tbody>
+                           </table>
+                        </div>
+                     </div>
+
+
+                     <button 
+                       onClick={handleAssignRole}
+                       disabled={loading}
+                       className="w-full bg-primary text-white py-6 rounded-3xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl shadow-primary/30 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                     >
+                        {loading ? 'Processing...' : 'Finalize Assignment'}
+                     </button>
+                  </div>
+               </div>
             )}
          </div>
       </div>
@@ -366,7 +567,14 @@ export default function MasterAdminConsole() {
                              <CompactInput label="Username" value={form.username} onChange={v => setForm({...form, username: v})} req />
                              <CompactSelect label="Auth Method" value={form.auth} options={[{v:'manual', l:'Manual accounts'}]} />
                              <CompactInput label="Password" type="password" value={form.password} onChange={v => setForm({...form, password: v})} />
-                          </div>
+                              <CompactSelect 
+                                label="Initial System Role" 
+                                value={form.roleid} 
+                                options={[{v:'', l:'None (Default)'}, ...data.roles.map(r => ({v: r.id, l: r.name}))]} 
+                                onChange={v => setForm({...form, roleid: v})}
+                                icon={<ShieldCheck size={12}/>}
+                              />
+                           </div>
 
                           <div className="flex items-center gap-12 bg-primary/5 p-6 rounded-2xl border border-primary/10">
                              <CompactToggle label="Suspended" checked={form.suspended} onChange={v => setForm({...form, suspended: v})} />

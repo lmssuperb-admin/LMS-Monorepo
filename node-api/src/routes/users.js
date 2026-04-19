@@ -28,9 +28,20 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
+  const { roleid, ...userData } = req.body;
   try {
-    const users = await moodleService.createUser(req.body);
-    res.json(users[0]);
+    const users = await moodleService.createUser(userData);
+    const newUser = users[0];
+    
+    if (roleid && newUser && newUser.id) {
+       try {
+         await moodleService.assignRole(newUser.id, roleid);
+       } catch (roleErr) {
+         console.error('⚠️ User created but role assignment failed:', roleErr.message);
+       }
+    }
+    
+    res.json(newUser);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

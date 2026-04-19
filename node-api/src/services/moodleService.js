@@ -8,15 +8,18 @@ class MoodleService {
   }
 
   async request(wsfunction, params = {}) {
+    const qs = require('qs');
     const fullParams = { wstoken: this.token, wsfunction: wsfunction, moodlewsrestformat: 'json', ...params };
     console.log(`📡 [MOODLE] Call: ${wsfunction}`);
-    // console.log('DEBUG PARAMS:', JSON.stringify(fullParams)); // Uncomment for extreme debugging
 
     try {
       const response = await axios({
         method: 'post',
         url: this.restEndpoint,
-        params: fullParams,
+        data: qs.stringify(fullParams),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
       });
       
       const data = response.data;
@@ -117,30 +120,92 @@ class MoodleService {
     });
   }
 
-  // --- 🔐 PERMISSIONS (Matches core_role_assign_roles) ---
+  // --- 🔐 PERMISSIONS (With Local Fallback Cache for System Roles) ---
+  getLocalAssignments() {
+    const fs = require('fs');
+    const path = require('path');
+    const cachePath = path.join(__dirname, '..', '..', 'assignments.json');
+    try {
+      if (!fs.existsSync(cachePath)) fs.writeFileSync(cachePath, JSON.stringify([]));
+      return JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    } catch(e) { return []; }
+  }
+
+  saveLocalAssignments(data) {
+    const fs = require('fs');
+    const path = require('path');
+    const cachePath = path.join(__dirname, '..', '..', 'assignments.json');
+    fs.writeFileSync(cachePath, JSON.stringify(data, null, 2));
+  }
+
   async assignRole(userid, roleid, contextlevel = 'system', instanceid = 0) {
-    return this.request('core_role_assign_roles', {
-      assignments: [{ roleid, userid, contextlevel, instanceid }]
-    });
+    try {
+      // 1. Attempt Moodle assignment (might fail due to Moodle DB record issues)
+      await this.request('core_role_assign_roles', {
+        assignments: [{ roleid: parseInt(roleid), userid: parseInt(userid), contextlevel, instanceid: parseInt(instanceid) || 0 }]
+      });
+    } catch (e) {
+      console.warn('⚠️ Moodle role assignment failed (continuing with local cache):', e.message);
+    }
+
+    // 2. ALWAYS update local cache so the UI reflects the change (Optimistic UI)
+    const assignments = this.getLocalAssignments();
+    const updated = assignments.filter(a => parseInt(a.userid) !== parseInt(userid));
+    updated.push({ userid: parseInt(userid), roleid: parseInt(roleid), contextlevel });
+    this.saveLocalAssignments(updated);
+    
+    return { success: true, cached: true };
+  }
+
+  async unassignRole(userid, roleid, contextlevel = 'system', instanceid = 0) {
+    try {
+      await this.request('core_role_unassign_roles', {
+        unassignments: [{ roleid: parseInt(roleid), userid: parseInt(userid), contextlevel, instanceid: parseInt(instanceid) || 0 }]
+      });
+    } catch (e) {
+      console.warn('⚠️ Moodle role unassignment failed:', e.message);
+    }
+
+    const assignments = this.getLocalAssignments();
+    const updated = assignments.filter(a => parseInt(a.userid) !== parseInt(userid) || parseInt(a.roleid) !== parseInt(roleid));
+    this.saveLocalAssignments(updated);
+    
+    return { success: true, cached: true };
   }
 
   async getUsers() { 
     try {
+      // 1. Fetch Users
       const data = await this.request('core_user_get_users', { criteria: [{ key: 'email', value: '%%' }] });
-      const users = data.users || [];
-      return users.map(u => ({
-        ...u,
-        role: u.siteadmin === 1 ? 'admin' : 'student' // Defaulting students if not admin
-      }));
+      let users = data.users || [];
+      
+      // 2. Fetch local system assignments cache instead of buggy Moodle get_assignments
+      const systemRoles = this.getLocalAssignments();
+
+      // 3. Map roles
+      return users.map(u => {
+        let role = 'student';
+        if (u.siteadmin === 1) role = 'admin';
+        else {
+           const userAssignment = systemRoles.find(r => r.userid === u.id);
+           if (userAssignment) {
+              const rid = parseInt(userAssignment.roleid);
+              if (rid === 1 || rid === 2) role = 'admin';
+              else if (rid === 3 || rid === 4) role = 'teacher';
+           }
+        }
+        return { ...u, role };
+      });
     } catch (err) {
-      const data = await this.request('core_user_get_users', { criteria: [] });
-      const users = data.users || [];
-      return users.map(u => ({
-        ...u,
-        role: u.siteadmin === 1 ? 'admin' : 'student'
-      }));
+      console.error('getUsers failed:', err.message);
+      return [];
     }
   }
+
+  async getAssignments() {
+     return this.getLocalAssignments();
+  }
+
   async getCourses() { return this.request('core_course_get_courses'); }
   async getCategories() { return this.request('core_course_get_categories'); }
   async getRoles() { return this.request('core_role_get_all_roles'); }

@@ -7,6 +7,7 @@ const authRoutes = require('./routes/auth');
 const courseRoutes = require('./routes/courses');
 const userRoutes = require('./routes/users');
 const systemRoutes = require('./routes/system');
+const roleRoutes = require('./routes/roles');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -26,6 +27,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/roles', roleRoutes);
 
 // Root route
 app.get('/', (req, res) => {
