@@ -1,4 +1,5 @@
 const axios = require('axios');
+const qs = require('qs');
 
 class MoodleService {
   constructor() {
@@ -8,7 +9,6 @@ class MoodleService {
   }
 
   async request(wsfunction, params = {}) {
-    const qs = require('qs');
     const fullParams = { wstoken: this.token, wsfunction: wsfunction, moodlewsrestformat: 'json', ...params };
     console.log(`📡 [MOODLE] Call: ${wsfunction}`);
 
@@ -187,7 +187,7 @@ class MoodleService {
         let role = 'student';
         if (u.siteadmin === 1) role = 'admin';
         else {
-           const userAssignment = systemRoles.find(r => r.userid === u.id);
+           const userAssignment = systemRoles.find(r => parseInt(r.userid) === parseInt(u.id));
            if (userAssignment) {
               const rid = parseInt(userAssignment.roleid);
               if (rid === 1 || rid === 2) role = 'admin';

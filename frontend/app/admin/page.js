@@ -76,16 +76,19 @@ export default function MasterAdminConsole() {
       else if (subTab === 'Manage courses') endpoint = 'courses';
       else if (subTab === 'Define roles' || subTab === 'Assign system roles') endpoint = 'roles';
 
+      // 🔄 Main Endpoint Fetch
       if (endpoint) {
         const res = await fetch(`http://localhost:4000/api/${endpoint}`, { signal }).then(r => r.json());
         let actualData = Array.isArray(res) ? res : (res.users || res.courses || res.roles || []);
         setData(prev => ({ ...prev, [endpoint]: actualData }));
       }
 
-      if (subTab === 'Assign system roles') {
-        // Fetch dependencies in parallel but Await them
+      // 🔐 Global Assignments Persistence Sync
+      // We always fetch assignments if in the Permissions main tab or specific subtab
+      if (mainTab === 'permissions' || subTab === 'Assign system roles') {
         const [usersRes, assignRes] = await Promise.all([
-          data.users.length === 0 ? fetch(`http://localhost:4000/api/users`, { signal }).then(r => r.json()) : Promise.resolve(null),
+          // We FORCE fetch users to update the role badges in the table
+          fetch(`http://localhost:4000/api/users`, { signal }).then(r => r.json()),
           fetch(`http://localhost:4000/api/roles/assignments?contextid=1`, { signal }).then(r => r.json())
         ]);
 
@@ -114,6 +117,7 @@ export default function MasterAdminConsole() {
       if (res && res.error) throw new Error(res.error);
       alert('Role Assigned Successfully!');
       setRoleForm({ userid: '', roleid: '', contextlevel: 'system', instanceid: 0 });
+      fetchTabData(); // Refresh UI instantly
     } catch (err) { alert('Assignment failed: ' + err.message); }
     setLoading(false);
   };
@@ -455,7 +459,9 @@ export default function MasterAdminConsole() {
                                 className="academy-input w-full h-16 bg-background/50 border border-glass-border px-6 text-xs font-bold appearance-none focus:border-primary transition-all outline-none rounded-2xl"
                               >
                                  <option value="">Choose a user...</option>
-                                 {data.users?.map(u => <option key={u.id} value={u.id}>{u.fullname} ({u.email})</option>)}
+                                 {data.users?.filter(u => !data.systemAssignments?.some(a => parseInt(a.userid) === parseInt(u.id))).map(u => (
+                                    <option key={u.id} value={u.id}>{u.fullname} ({u.email})</option>
+                                 ))}
                               </select>
                               <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={16}/>
                            </div>
