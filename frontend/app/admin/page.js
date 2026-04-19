@@ -197,17 +197,17 @@ export default function MasterAdminConsole() {
     <div className="w-full h-[calc(100vh-80px)] flex overflow-hidden bg-background text-main">
       
       {/* MASTER SIDEBAR */}
-      <div className="w-80 flex-shrink-0 bg-surface border-r border-glass-border flex flex-col">
+      <div className="w-72 flex-shrink-0 bg-surface border-r border-glass-border flex flex-col shadow-sm">
          <div className="p-8 border-b border-glass-border">
-            <h1 className="text-2xl font-black italic uppercase tracking-tighter">Site<br/><span className="text-primary not-italic">Admin</span></h1>
+            <h1 className="text-xl font-black italic uppercase tracking-tighter">Site<br/><span className="text-primary not-italic">Admin</span></h1>
          </div>
-         <nav className="flex-grow p-6 space-y-4">
+         <nav className="flex-grow p-4 space-y-1.5">
             {Object.entries(menuItems).map(([key, item]) => (
               <div key={key}>
-                 <button onClick={() => { setMainTab(key); setSubTab(item.subs[0]); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-black uppercase text-[10px] tracking-widest ${mainTab === key ? 'bg-primary text-white shadow-2xl shadow-primary/20' : 'text-muted hover:bg-white/5'}`}>{item.icon} {key}</button>
+                 <button onClick={() => { setMainTab(key); setSubTab(item.subs[0]); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-black uppercase text-[10px] tracking-widest ${mainTab === key ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted hover:bg-surface-hover'}`}>{item.icon} {key}</button>
                  {mainTab === key && (
-                   <div className="ml-9 mt-2 space-y-1 py-1 border-l border-glass-border animate-in slide-in-from-left-2 transition-all duration-300">
-                      {item.subs.map(sub => (<button key={sub} onClick={() => { setSubTab(sub); if(sub === 'Add user') setShowModal('Add User'); }} className={`w-full text-left px-5 py-2.5 text-[11px] font-bold transition-all ${subTab === sub ? 'text-primary' : 'text-muted hover:text-main'}`}>{sub}</button>))}
+                   <div className="ml-8 mt-1 space-y-0.5 py-1 border-l-2 border-primary/20 animate-in slide-in-from-left-1 duration-300">
+                      {item.subs.map(sub => (<button key={sub} onClick={() => { setSubTab(sub); if(sub === 'Add user') setShowModal('Add User'); }} className={`w-full text-left px-5 py-2 text-[10px] font-bold tracking-tight transition-all ${subTab === sub ? 'text-primary' : 'text-muted hover:text-main'}`}>{sub}</button>))}
                    </div>
                  )}
               </div>
@@ -216,16 +216,17 @@ export default function MasterAdminConsole() {
       </div>
 
       <div className="flex-grow flex flex-col min-w-0">
-         <div className="h-24 bg-surface/50 border-b border-glass-border px-10 flex items-center justify-between backdrop-blur-xl">
-            <h2 className="text-xl font-black italic tracking-tight uppercase">{subTab}</h2>
-            {loading && <Loader2 className="animate-spin text-primary" size={20}/>}
+         <div className="h-20 bg-surface/80 border-b border-glass-border px-8 flex items-center justify-between backdrop-blur-md sticky top-0 z-10">
+            <h2 className="text-lg font-black italic tracking-tight uppercase text-main/90">{subTab}</h2>
+            {loading && <Loader2 className="animate-spin text-primary" size={18}/>}
          </div>
 
-         <div className="flex-grow overflow-y-auto p-12 custom-scrollbar">
+         <div className="flex-grow overflow-y-auto p-8 custom-scrollbar">
             {subTab === 'Browse users' && (
-               <div className="space-y-8 animate-in fade-in duration-500">
-                  <div className="flex justify-between items-center bg-surface/40 p-6 rounded-[32px] border border-glass-border backdrop-blur-md">
+               <div className="space-y-6 animate-in fade-in duration-500">
+                  <div className="flex justify-between items-center bg-surface/60 p-5 rounded-2xl border border-glass-border shadow-sm">
                      <button onClick={() => {
+                        // ... existing form reset ...
                         setForm({
                           username: '', auth: 'manual', suspended: false, generatepass: false, password: '', forcechange: false,
                           firstname: '', lastname: '', email: '', visibility: '1', city: '', country: 'IN', timezone: '99', lang: 'en',
@@ -236,14 +237,14 @@ export default function MasterAdminConsole() {
                            setData(prev => ({...prev, roles: Array.isArray(res) ? res : (res.roles || [])}));
                         });
                         setShowModal('Add User');
-                     }} className="bg-primary text-white px-10 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-all">Add a new user</button>
-                     <div className="flex gap-4 items-center">
+                     }} className="bg-primary text-white px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md shadow-primary/20 hover:shadow-lg hover:-translate-y-0.5 transition-all">Add a new user</button>
+                     <div className="flex gap-3 items-center">
                          <div className="relative">
                             <button 
                               onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                              className={`bg-white/5 border border-glass-border px-6 py-4 rounded-2xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${showFilterDropdown ? 'text-primary border-primary/50' : 'text-muted hover:text-main'}`}
+                              className={`bg-surface border border-glass-border px-5 py-3.5 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${showFilterDropdown ? 'text-primary border-primary shadow-sm' : 'text-muted hover:bg-surface-hover'}`}
                             >
-                               <Filter size={16}/> Filter By: {activeFilters.length}
+                               <Filter size={14}/> Filter: {activeFilters.length}
                             </button>
                             {showFilterDropdown && (
                               <div className="absolute right-0 mt-3 w-64 bg-surface border border-glass-border rounded-[24px] shadow-3xl z-[100] p-6 space-y-6 animate-in zoom-in-95 duration-200">
@@ -439,18 +440,18 @@ export default function MasterAdminConsole() {
             )}
 
             {subTab === 'Assign system roles' && (
-               <div className="max-w-4xl space-y-10 animate-in slide-in-from-bottom-4 duration-500">
-                  <div className="bg-surface/40 p-12 rounded-[48px] border border-glass-border backdrop-blur-md space-y-10 shadow-3xl">
-                     <div className="flex items-center gap-6">
-                        <div className="p-4 bg-primary/10 rounded-3xl text-primary"><ShieldCheck size={32}/></div>
+               <div className="max-w-4xl space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+                  <div className="bg-surface p-10 rounded-3xl border border-glass-border shadow-xl space-y-8">
+                     <div className="flex items-center gap-5">
+                        <div className="p-3.5 bg-primary/10 rounded-2xl text-primary border border-primary/10"><ShieldCheck size={28}/></div>
                         <div>
-                           <h3 className="text-2xl font-black italic uppercase tracking-tight">System Assignment</h3>
-                           <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1">Assign global permissions to users</p>
+                           <h3 className="text-xl font-black italic uppercase tracking-tight text-main">System Assignment</h3>
+                           <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-0.5">Assign global permissions to users</p>
                         </div>
                      </div>
 
-                     <div className="grid grid-cols-2 gap-10">
-                        <div className="space-y-4">
+                     <div className="grid grid-cols-2 gap-8">
+                        <div className="space-y-3">
                            <p className="text-[9px] font-black uppercase text-muted tracking-widest ml-1">Select User</p>
                            <div className="relative">
                               <select 
@@ -548,33 +549,33 @@ export default function MasterAdminConsole() {
          </div>
       </div>
 
-      {/* ── HIGH-DENSITY PROFESSIONAL USER PORTAL ──────────────── */}
+      {/* ── HIGH-DENSITY PROFESSIONAL USER PORTAL ── */}
       {showModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-8 bg-black/80 backdrop-blur-2xl animate-in fade-in duration-300">
-           <div className="bg-surface w-full max-w-6xl border border-glass-border rounded-[48px] shadow-3xl flex h-[85vh] overflow-hidden">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
+           <div className="bg-surface w-full max-w-5xl border border-glass-border rounded-3xl shadow-3xl flex h-[80vh] overflow-hidden">
               
-              <div className="w-72 bg-white/5 border-r border-glass-border flex flex-col p-8">
-                 <div className="mb-10 text-primary"><UserPlus size={40}/></div>
-                 <h3 className="text-xl font-black italic uppercase mb-8">{showModal}</h3>
-                 <nav className="space-y-2">
-                    <ModalNav active={modalSection === 'general'} icon={<ScrollText size={16}/>} label="General" onClick={() => setModalSection('general')} />
-                    <ModalNav active={modalSection === 'userpicture'} icon={<Camera size={16}/>} label="User Picture" onClick={() => setModalSection('userpicture')} />
-                    <ModalNav active={modalSection === 'optional'} icon={<LayoutGrid size={16}/>} label="Institutional" onClick={() => setModalSection('optional')} />
+              <div className="w-64 bg-surface-hover/30 border-r border-glass-border flex flex-col p-6">
+                 <div className="mb-8 text-primary"><UserPlus size={32}/></div>
+                 <h3 className="text-lg font-black italic uppercase mb-6 text-main/90">{showModal}</h3>
+                 <nav className="space-y-1.5">
+                    <ModalNav active={modalSection === 'general'} icon={<ScrollText size={14}/>} label="General" onClick={() => setModalSection('general')} />
+                    <ModalNav active={modalSection === 'userpicture'} icon={<Camera size={14}/>} label="User Picture" onClick={() => setModalSection('userpicture')} />
+                    <ModalNav active={modalSection === 'optional'} icon={<LayoutGrid size={14}/>} label="Institutional" onClick={() => setModalSection('optional')} />
                  </nav>
               </div>
 
-              <div className="flex-grow flex flex-col min-w-0 relative bg-background/20">
-                 <button onClick={() => setShowModal(false)} className="absolute right-8 top-8 p-3 bg-white/5 rounded-2xl hover:bg-red-500 hover:text-white transition-all z-10 focus:outline-none"><X size={24}/></button>
+              <div className="flex-grow flex flex-col min-w-0 relative">
+                 <button onClick={() => setShowModal(false)} className="absolute right-6 top-6 p-2.5 bg-background border border-glass-border rounded-xl hover:bg-red-500 hover:text-white hover:border-red-500 transition-all z-10 focus:outline-none"><X size={20}/></button>
 
-                 <div className="flex-grow overflow-y-auto p-12 custom-scrollbar">
+                 <div className="flex-grow overflow-y-auto p-10 custom-scrollbar">
                     {modalSection === 'general' && (
-                       <div className="space-y-10 animate-in fade-in duration-500">
-                          <div className="grid grid-cols-3 gap-8 p-8 bg-white/5 rounded-[32px] border border-glass-border hover:border-primary/20 transition-all">
+                       <div className="space-y-8 animate-in fade-in duration-500">
+                          <div className="grid grid-cols-3 gap-6 p-6 bg-background/30 rounded-2xl border border-glass-border">
                              <CompactInput label="Username" value={form.username} onChange={v => setForm({...form, username: v})} req />
                              <CompactSelect label="Auth Method" value={form.auth} options={[{v:'manual', l:'Manual accounts'}]} />
                              <CompactInput label="Password" type="password" value={form.password} onChange={v => setForm({...form, password: v})} />
-                              <CompactSelect 
-                                label="Initial System Role" 
+                             <CompactSelect 
+                                label="System Role" 
                                 value={form.roleid} 
                                 options={[{v:'', l:'None (Default)'}, ...data.roles.map(r => ({v: r.id, l: r.name}))]} 
                                 onChange={v => setForm({...form, roleid: v})}
@@ -582,22 +583,20 @@ export default function MasterAdminConsole() {
                               />
                            </div>
 
-                          <div className="flex items-center gap-12 bg-primary/5 p-6 rounded-2xl border border-primary/10">
+                          <div className="flex items-center gap-8 bg-primary/5 p-5 rounded-xl border border-primary/10">
                              <CompactToggle label="Suspended" checked={form.suspended} onChange={v => setForm({...form, suspended: v})} />
-                             <CompactToggle label="Force Pass Change" checked={form.forcechange} onChange={v => setForm({...form, forcechange: v})} />
+                             <CompactToggle label="Force Change" checked={form.forcechange} onChange={v => setForm({...form, forcechange: v})} />
                           </div>
 
-                          <div className="grid grid-cols-3 gap-8">
+                          <div className="grid grid-cols-3 gap-6">
                              <CompactInput label="First name" req value={form.firstname} onChange={v => setForm({...form, firstname: v})} />
                              <CompactInput label="Last name" req value={form.lastname} onChange={v => setForm({...form, lastname: v})} />
                              <CompactInput label="Email address" req value={form.email} onChange={v => setForm({...form, email: v})} />
                           </div>
 
-                          <div className="grid grid-cols-4 gap-6">
+                          <div className="grid grid-cols-2 gap-6">
                              <CompactInput label="City" value={form.city} onChange={v => setForm({...form, city: v})} />
                              <CompactSelect label="Country" value={form.country} options={[{v:'IN', l:'India'}, {v:'US', l:'USA'}]} onChange={v => setForm({...form, country: v})} />
-                             <CompactSelect label="Timezone" value={form.timezone} options={[{v:'99', l:'Server time'}]} />
-                             <CompactSelect label="Language" value={form.lang} options={[{v:'en', l:'English'}]} />
                           </div>
                        </div>
                     )}
