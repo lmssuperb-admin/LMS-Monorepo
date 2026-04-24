@@ -44,6 +44,13 @@ router.post('/', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.put('/:id', async (req, res) => {
+  try {
+    const courses = await moodleService.updateCourse(req.params.id, req.body);
+    res.json(courses[0] || { success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     await moodleService.deleteCourses([req.params.id]);

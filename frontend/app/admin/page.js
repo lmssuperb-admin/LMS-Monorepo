@@ -26,6 +26,7 @@ export default function MasterAdminConsole() {
    const [loading, setLoading] = useState(false);
    const [showModal, setShowModal] = useState(false);
    const [editingUser, setEditingUser] = useState(null);
+   const [editingCourse, setEditingCourse] = useState(null);
    const [activeMenu, setActiveMenu] = useState(null);
    const [modalSection, setModalSection] = useState('general');
    const fileInputRef = useRef(null);
@@ -72,6 +73,22 @@ export default function MasterAdminConsole() {
       posterImageUrl: '',
       captions: '',
       completionTracking: 'manual', // 'none', 'manual', 'conditions'
+      requireView: false,
+      courseCompletion: false,
+      completionDate: '',
+      completionDateEnabled: false,
+      restrictions: [],
+   });
+
+   const [pdfActivityForm, setPdfActivityForm] = useState({
+      name: '',
+      description: '',
+      displayDescription: false,
+      displayContents: 'separate', // 'separate' or 'inline'
+      showSubfolders: true,
+      openInNewTab: true,
+      pdfUrl: '',
+      completionTracking: 'manual',
       requireView: false,
       courseCompletion: false,
       completionDate: '',
@@ -245,8 +262,11 @@ export default function MasterAdminConsole() {
          }
 
          setCreatedCourse(course);
-         setCourseStep(6); // Success
          alert('Course Published Successfully!');
+         setCourseStep(1);
+         setMainTab('courses');
+         setSubTab('Manage courses');
+         setActiveCourseView('dashboard');
       } catch (err) {
          alert("Publication failed: " + err.message);
       }
@@ -254,8 +274,9 @@ export default function MasterAdminConsole() {
    };
 
    const handleSaveActivity = () => {
+      const formToUse = selectedActivity === 'pdf' ? pdfActivityForm : videoActivityForm;
       const newActivity = {
-         ...videoActivityForm,
+         ...formToUse,
          id: `temp-${Date.now()}`,
          type: selectedActivity,
       };
@@ -271,6 +292,11 @@ export default function MasterAdminConsole() {
          playerSizeWidth: '800', playerSizeHeight: '500', moveForward: false, responsive: true,
          posterImageUrl: '', captions: '', completionTracking: 'manual', requireView: false,
          courseCompletion: false, completionDate: '', completionDateEnabled: false, restrictions: [],
+      });
+      setPdfActivityForm({
+         name: '', description: '', displayDescription: false, displayContents: 'separate',
+         showSubfolders: true, openInNewTab: true, pdfUrl: '', completionTracking: 'manual',
+         requireView: false, courseCompletion: false, completionDate: '', completionDateEnabled: false, restrictions: [],
       });
    };
 
@@ -293,10 +319,37 @@ export default function MasterAdminConsole() {
       setLoading(false);
    };
 
+   const handleDeleteCourse = async (id) => {
+      if (!confirm('Are you sure you want to delete this course?')) return;
+      setLoading(true);
+      try {
+         const res = await fetch(`http://localhost:4000/api/courses/${id}`, { method: 'DELETE' }).then(r => r.json());
+         if (res.error) throw new Error(res.error);
+         alert('Course Deleted Successfully!');
+         fetchTabData();
+      } catch (err) {
+         alert("Deletion failed: " + err.message);
+      }
+      setLoading(false);
+   };
+
 
    const handleInitialize = async () => {
       setLoading(true);
       try {
+         if (showModal === 'Edit Course') {
+            const res = await fetch(`http://localhost:4000/api/courses/${editingCourse.id}`, {
+               method: 'PUT',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify(courseForm)
+            }).then(r => r.json());
+            if (res.error) throw new Error(res.error);
+            setShowModal(false);
+            fetchTabData();
+            alert('Course Updated Successfully!');
+            setLoading(false);
+            return;
+         }
          const isEdit = showModal === 'Edit User';
          const url = isEdit ? `http://localhost:4000/api/users/${editingUser.id}` : 'http://localhost:4000/api/users';
          const method = isEdit ? 'PUT' : 'POST';
@@ -327,7 +380,11 @@ export default function MasterAdminConsole() {
       try {
          const res = await fetch('http://localhost:4000/api/system/upload', { method: 'POST', body: formData }).then(r => r.json());
          if (res.url) {
-            setVideoActivityForm(prev => ({ ...prev, [field]: res.url }));
+            if (selectedActivity === 'pdf') {
+               setPdfActivityForm(prev => ({ ...prev, [field]: res.url }));
+            } else {
+               setVideoActivityForm(prev => ({ ...prev, [field]: res.url }));
+            }
             alert('File uploaded successfully!');
          }
       } catch (err) { alert('Upload failed'); }
@@ -360,7 +417,7 @@ export default function MasterAdminConsole() {
 
    const menuItems = {
       users: { icon: <Users size={18} />, subs: ['Browse users', 'Add user'] },
-      courses: { icon: <BookOpen size={8} />, subs: ['Manage courses', 'Categories', 'Add course'] },
+      courses: { icon: <BookOpen size={18} />, subs: ['Manage courses', 'Categories', 'Add course'] },
       permissions: { icon: <ShieldCheck size={18} />, subs: ['Define roles', 'Assign system roles'] },
    };
 
@@ -726,6 +783,65 @@ export default function MasterAdminConsole() {
                   </div>
                )}
 
+               {subTab === 'Manage courses' && (
+                  <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+                     <div className="flex justify-between items-center bg-surface/60 p-6 rounded-3xl border border-glass-border shadow-sm">
+                        <div>
+                           <h3 className="text-xl font-black italic uppercase tracking-tight text-main">Manage Courses</h3>
+                           <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1">View, edit, and organize all available courses</p>
+                        </div>
+                        <button onClick={() => setSubTab('Add course')} className="bg-primary text-white px-8 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md hover:shadow-lg transition-all flex items-center gap-3">
+                           <Plus size={16} /> Create New Course
+                        </button>
+                     </div>
+
+                     <div className="academy-card overflow-hidden text-[11px]">
+                        <table className="w-full text-left border-collapse">
+                           <thead>
+                              <tr className="border-b border-glass-border bg-white/5 uppercase text-[9px] font-black tracking-[0.2em] text-primary/60">
+                                 <th className="p-6">Course Name</th>
+                                 <th className="p-6">Shortname</th>
+                                 <th className="p-6">Category</th>
+                                 <th className="p-6 text-right">Actions</th>
+                              </tr>
+                           </thead>
+                           <tbody className="divide-y divide-glass-border text-xs font-bold">
+                              {data.courses?.map(c => (
+                                 <tr key={c.id} className="hover:bg-white/5 transition-colors group">
+                                    <td className="p-6">
+                                       <div className="flex items-center gap-4">
+                                          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary overflow-hidden">
+                                             {c.imageurl ? <img src={c.imageurl} className="w-full h-full object-cover" /> : <BookOpen size={20} />}
+                                          </div>
+                                          <div className="flex flex-col">
+                                             <span className="text-main uppercase tracking-tighter text-sm">{c.fullname}</span>
+                                             <span className="text-muted text-[10px] font-medium line-clamp-1 max-w-xs">{c.summary?.replace(/<[^>]*>/g, '') || 'No summary provided'}</span>
+                                          </div>
+                                       </div>
+                                    </td>
+                                    <td className="p-6 text-muted font-medium uppercase tracking-widest text-[10px]">{c.shortname}</td>
+                                    <td className="p-6">
+                                       <span className="px-3 py-1 bg-surface border border-glass-border rounded-full text-[9px] uppercase text-muted">
+                                          {data.categories.find(cat => cat.id == c.categoryid)?.name || `Category #${c.categoryid}`}
+                                       </span>
+                                    </td>
+                                    <td className="p-6 text-right">
+                                       <div className="flex justify-end gap-2">
+                                          <button onClick={() => { setEditingCourse(c); setCourseForm({ fullname: c.fullname, categoryid: c.categoryid, summary: c.summary, imageurl: c.imageurl }); setShowModal('Edit Course'); setModalSection('general'); }} className="p-3 hover:bg-primary hover:text-white rounded-xl transition-all border border-glass-border text-muted"><Edit2 size={16} /></button>
+                                          <button onClick={() => handleDeleteCourse(c.id)} className="p-3 hover:bg-red-500 hover:text-white rounded-xl transition-all border border-glass-border text-muted"><X size={16} /></button>
+                                       </div>
+                                    </td>
+                                 </tr>
+                              ))}
+                              {(!data.courses || data.courses.length === 0) && (
+                                 <tr><td colSpan="4" className="p-20 text-center text-muted uppercase text-[10px] tracking-[0.3em]">No courses found in database</td></tr>
+                              )}
+                           </tbody>
+                        </table>
+                     </div>
+                  </div>
+               )}
+
                {subTab === 'Add course' && (
                   <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
                      {courseStep < 4 && (
@@ -943,10 +1059,10 @@ export default function MasterAdminConsole() {
                                               <h4 className="text-xs font-black text-main uppercase">Add Video</h4>
                                               <p className="text-[10px] text-muted mt-1 uppercase font-bold flex-grow">Upload MP4 or Link URL</p>
                                            </div>
-                                           <div className="bg-white/5 border border-glass-border p-6 rounded-2xl text-left hover:border-primary transition-all cursor-pointer group flex flex-col h-full" onClick={() => { setSelectedActivity('document'); setActiveCourseView('add-activity'); }}>
+                                           <div className="bg-white/5 border border-glass-border p-6 rounded-2xl text-left hover:border-primary transition-all cursor-pointer group flex flex-col h-full" onClick={() => { setSelectedActivity('pdf'); setActiveCourseView('add-activity'); }}>
                                               <div className="w-10 h-10 rounded-xl bg-blue-500 text-white flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><FileText size={18} /></div>
-                                              <h4 className="text-xs font-black text-main uppercase">Add Document</h4>
-                                              <p className="text-[10px] text-muted mt-1 uppercase font-bold flex-grow">Upload PDF, Word, or text files</p>
+                                              <h4 className="text-xs font-black text-main uppercase">PDF Uploader</h4>
+                                              <p className="text-[10px] text-muted mt-1 uppercase font-bold flex-grow">Upload PDF documents and manuals</p>
                                            </div>
                                            <div className="bg-white/5 border border-glass-border p-6 rounded-2xl text-left hover:border-primary transition-all cursor-pointer group flex flex-col h-full relative overflow-hidden" onClick={() => { setSelectedActivity('quiz'); setActiveCourseView('add-activity'); }}>
                                               <div className="absolute top-3 right-3 px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full text-[8px] font-black uppercase tracking-widest">AI Powered</div>
@@ -981,8 +1097,8 @@ export default function MasterAdminConsole() {
                                  </div>
                                  <input 
                                     type="text" 
-                                    value={videoActivityForm.name} 
-                                    onChange={e => setVideoActivityForm({ ...videoActivityForm, name: e.target.value })} 
+                                    value={selectedActivity === 'pdf' ? pdfActivityForm.name : videoActivityForm.name} 
+                                    onChange={e => selectedActivity === 'pdf' ? setPdfActivityForm({ ...pdfActivityForm, name: e.target.value }) : setVideoActivityForm({ ...videoActivityForm, name: e.target.value })} 
                                     className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 text-xs font-bold focus:border-primary transition-all outline-none rounded-2xl shadow-inner" 
                                     placeholder={`Enter activity name...`} 
                                  />
@@ -1007,20 +1123,100 @@ export default function MasterAdminConsole() {
                                        </div>
                                     </div>
                                     <textarea 
-                                       value={videoActivityForm.description}
-                                       onChange={e => setVideoActivityForm({ ...videoActivityForm, description: e.target.value })}
+                                       value={selectedActivity === 'pdf' ? pdfActivityForm.description : videoActivityForm.description}
+                                       onChange={e => selectedActivity === 'pdf' ? setPdfActivityForm({ ...pdfActivityForm, description: e.target.value }) : setVideoActivityForm({ ...videoActivityForm, description: e.target.value })}
                                        className="w-full h-40 bg-transparent p-6 text-xs font-bold outline-none resize-none custom-scrollbar" 
                                        placeholder="Enter activity description..." 
                                     />
                                  </div>
                               </div>
                               <label className="flex items-center gap-4 group cursor-pointer w-max">
-                                 <div onClick={() => setVideoActivityForm({ ...videoActivityForm, displayDescription: !videoActivityForm.displayDescription })} className={`w-5 h-5 rounded-[6px] border-2 transition-all flex items-center justify-center ${videoActivityForm.displayDescription ? 'bg-primary border-primary' : 'border-glass-border group-hover:border-primary'}`}>
-                                    {videoActivityForm.displayDescription && <Plus size={14} className="text-white rotate-45" />}
+                                 <div onClick={() => selectedActivity === 'pdf' ? setPdfActivityForm({ ...pdfActivityForm, displayDescription: !pdfActivityForm.displayDescription }) : setVideoActivityForm({ ...videoActivityForm, displayDescription: !videoActivityForm.displayDescription })} className={`w-5 h-5 rounded-[6px] border-2 transition-all flex items-center justify-center ${(selectedActivity === 'pdf' ? pdfActivityForm.displayDescription : videoActivityForm.displayDescription) ? 'bg-primary border-primary' : 'border-glass-border group-hover:border-primary'}`}>
+                                    {(selectedActivity === 'pdf' ? pdfActivityForm.displayDescription : videoActivityForm.displayDescription) && <Plus size={14} className="text-white rotate-45" />}
                                  </div>
                                  <span className="text-[10px] font-bold text-main/80 uppercase tracking-widest">Display description on course page</span>
                               </label>
+
+                              {selectedActivity === 'pdf' && (
+                                 <div className="space-y-6 pt-4 animate-in fade-in slide-in-from-top-2 duration-500">
+                                    <div className="space-y-3">
+                                       <div className="flex items-center gap-2">
+                                          <span className="text-[9px] font-black uppercase text-muted tracking-widest">Display folder contents</span>
+                                          <Info size={10} className="text-muted/50" />
+                                       </div>
+                                       <select 
+                                          value={pdfActivityForm.displayContents}
+                                          onChange={e => setPdfActivityForm({ ...pdfActivityForm, displayContents: e.target.value })}
+                                          className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 text-xs font-bold focus:border-primary transition-all outline-none rounded-2xl shadow-inner appearance-none"
+                                       >
+                                          <option value="separate">On a separate page</option>
+                                          <option value="inline">Inline on course page</option>
+                                       </select>
+                                    </div>
+                                    <div className="space-y-4">
+                                       <label className="flex items-center gap-4 group cursor-pointer w-max">
+                                          <div onClick={() => setPdfActivityForm({ ...pdfActivityForm, showSubfolders: !pdfActivityForm.showSubfolders })} className={`w-5 h-5 rounded-[6px] border-2 transition-all flex items-center justify-center ${pdfActivityForm.showSubfolders ? 'bg-primary border-primary' : 'border-glass-border group-hover:border-primary'}`}>
+                                             {pdfActivityForm.showSubfolders && <Plus size={14} className="text-white rotate-45" />}
+                                          </div>
+                                          <span className="text-[10px] font-bold text-main/80 uppercase tracking-widest">Show sub-folders expanded</span>
+                                       </label>
+                                       <label className="flex items-center gap-4 group cursor-pointer w-max">
+                                          <div onClick={() => setPdfActivityForm({ ...pdfActivityForm, openInNewTab: !pdfActivityForm.openInNewTab })} className={`w-5 h-5 rounded-[6px] border-2 transition-all flex items-center justify-center ${pdfActivityForm.openInNewTab ? 'bg-primary border-primary' : 'border-glass-border group-hover:border-primary'}`}>
+                                             {pdfActivityForm.openInNewTab && <Plus size={14} className="text-white rotate-45" />}
+                                          </div>
+                                          <span className="text-[10px] font-bold text-main/80 uppercase tracking-widest">Open PDFs in new tabs/windows</span>
+                                       </label>
+                                    </div>
+                                 </div>
+                              )}
                            </div>
+
+                                       {/* PDF Section */}
+                                       {selectedActivity === 'pdf' && (
+                                          <div className="space-y-6">
+                                             <h4 className="text-[12px] font-black uppercase text-main tracking-widest border-l-4 border-primary pl-4">PDF</h4>
+                                             <div className="space-y-4">
+                                                <label className="text-[10px] font-black uppercase text-main tracking-widest ml-1"><span className="text-red-500">*</span> PDFs <Info size={12} className="inline text-muted/50" /></label>
+                                                <div 
+                                                   onClick={() => activityFileInputRef.current?.click()}
+                                                   className="w-full h-64 border-2 border-dashed border-glass-border bg-background/30 rounded-[32px] flex flex-col items-center justify-center gap-4 hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer group shadow-inner relative overflow-hidden"
+                                                >
+                                                   <input 
+                                                      type="file" 
+                                                      ref={activityFileInputRef} 
+                                                      className="hidden" 
+                                                      accept="application/pdf"
+                                                      onChange={(e) => handleActivityFileUpload(e, 'pdfUrl')} 
+                                                   />
+                                                   {pdfActivityForm.pdfUrl ? (
+                                                      <div className="text-center p-6">
+                                                         <div className="p-4 bg-primary/10 rounded-2xl mb-4 inline-block">
+                                                            <FileText size={32} className="text-primary" />
+                                                         </div>
+                                                         <p className="text-xs font-black text-main uppercase">PDF Uploaded Successfully</p>
+                                                         <p className="text-[10px] text-muted mt-1 truncate max-w-xs">{pdfActivityForm.pdfUrl}</p>
+                                                         <button 
+                                                            onClick={(e) => { e.stopPropagation(); setPdfActivityForm({ ...pdfActivityForm, pdfUrl: '' }); }}
+                                                            className="mt-4 text-[9px] font-black text-red-500 uppercase tracking-widest hover:underline"
+                                                         >
+                                                            Remove File
+                                                         </button>
+                                                      </div>
+                                                   ) : (
+                                                      <>
+                                                         <div className="p-5 bg-surface rounded-2xl shadow-xl group-hover:scale-110 transition-transform">
+                                                            <UploadCloud size={32} className="text-primary" />
+                                                         </div>
+                                                         <div className="text-center">
+                                                            <span className="text-sm font-black text-main">Drag and drop PDF here, or click to <span className="text-primary hover:underline">browse</span></span>
+                                                            <p className="text-[10px] font-bold text-muted mt-2 uppercase tracking-widest opacity-60">File Format: PDF Only</p>
+                                                         </div>
+                                                      </>
+                                                   )}
+                                                </div>
+                                             </div>
+                                          </div>
+                                       )}
 
                                        {/* Video Section */}
                                        {selectedActivity === 'video' && (
@@ -1110,117 +1306,119 @@ export default function MasterAdminConsole() {
                                           
                                           <div className="space-y-4">
                                              {/* Video Specific Settings */}
-                                             <div className="border border-glass-border rounded-[32px] overflow-hidden bg-surface shadow-xl">
-                                                <div 
-                                                   onClick={() => setActiveAdvancedSection(activeAdvancedSection === 'video' ? '' : 'video')}
-                                                   className={`p-6 flex items-center justify-between cursor-pointer transition-colors ${activeAdvancedSection === 'video' ? 'bg-primary/5' : 'hover:bg-white/5'}`}
-                                                >
-                                                   <span className="text-xs font-black uppercase tracking-widest text-main">Video Options</span>
-                                                   <ChevronDown size={18} className={`transition-transform duration-300 ${activeAdvancedSection === 'video' ? 'rotate-180' : ''}`} />
-                                                </div>
-                                                
-                                                {activeAdvancedSection === 'video' && (
-                                                   <div className="p-10 space-y-10 animate-in slide-in-from-top-4 duration-300">
-                                                      <div className="space-y-4">
-                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] font-black uppercase text-main tracking-widest">Video player size</span>
-                                                            <Info size={12} className="text-muted/50" />
-                                                         </div>
-                                                         <div className="flex items-center gap-6">
-                                                            <div className="relative flex-1 max-w-[200px]">
-                                                               <input 
-                                                                  type="number" 
-                                                                  value={videoActivityForm.playerSizeWidth}
-                                                                  onChange={e => setVideoActivityForm({ ...videoActivityForm, playerSizeWidth: e.target.value })}
-                                                                  className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 pr-12 text-xs font-bold focus:border-primary transition-all outline-none rounded-xl" 
-                                                               />
-                                                               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted uppercase">px</span>
-                                                            </div>
-                                                            <X size={14} className="text-muted opacity-40" />
-                                                            <div className="relative flex-1 max-w-[200px]">
-                                                               <input 
-                                                                  type="number" 
-                                                                  value={videoActivityForm.playerSizeHeight}
-                                                                  onChange={e => setVideoActivityForm({ ...videoActivityForm, playerSizeHeight: e.target.value })}
-                                                                  className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 pr-12 text-xs font-bold focus:border-primary transition-all outline-none rounded-xl" 
-                                                               />
-                                                               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted uppercase">px</span>
-                                                            </div>
-                                                         </div>
-                                                      </div>
-
-                                                      <div className="grid grid-cols-2 gap-10">
-                                                         <div className="space-y-4">
-                                                            <div className="flex items-center gap-2">
-                                                               <span className="text-[10px] font-black uppercase text-main tracking-widest">Move forward</span>
-                                                               <Info size={12} className="text-muted/50" />
-                                                            </div>
-                                                            <CompactToggle 
-                                                               label={videoActivityForm.moveForward ? "Enabled" : "Disabled"} 
-                                                               checked={videoActivityForm.moveForward} 
-                                                               onChange={v => setVideoActivityForm({ ...videoActivityForm, moveForward: v })} 
-                                                            />
-                                                         </div>
-                                                         <div className="space-y-4">
-                                                            <div className="flex items-center gap-2">
-                                                               <span className="text-[10px] font-black uppercase text-main tracking-widest">Responsive</span>
-                                                               <Info size={12} className="text-muted/50" />
-                                                            </div>
-                                                            <CompactToggle 
-                                                               label={videoActivityForm.responsive ? "Enabled" : "Disabled"} 
-                                                               checked={videoActivityForm.responsive} 
-                                                               onChange={v => setVideoActivityForm({ ...videoActivityForm, responsive: v })} 
-                                                            />
-                                                         </div>
-                                                      </div>
-
-                                                      <div className="space-y-4">
-                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] font-black uppercase text-main tracking-widest">Poster image</span>
-                                                            <Info size={12} className="text-muted/50" />
-                                                         </div>
-                                                         <input 
-                                                            type="file" 
-                                                            ref={posterImageInputRef} 
-                                                            className="hidden" 
-                                                            accept="image/*"
-                                                            onChange={(e) => handleActivityFileUpload(e, 'posterImageUrl')} 
-                                                         />
-                                                         <div 
-                                                            onClick={() => posterImageInputRef.current?.click()}
-                                                            className="w-full h-48 border-2 border-dashed border-glass-border bg-background/30 rounded-3xl flex flex-col items-center justify-center gap-3 hover:border-primary/50 transition-all cursor-pointer group shadow-inner relative overflow-hidden"
-                                                         >
-                                                            {videoActivityForm.posterImageUrl ? (
-                                                               <img src={videoActivityForm.posterImageUrl} className="w-full h-full object-cover" />
-                                                            ) : (
-                                                               <>
-                                                                  <UploadCloud size={24} className="text-muted group-hover:text-primary transition-colors" />
-                                                                  <div className="text-center">
-                                                                     <p className="text-[11px] font-black text-main uppercase tracking-widest">Drag and drop image here, or click to <span className="text-primary underline">browse</span></p>
-                                                                     <p className="text-[9px] font-bold text-muted mt-1 uppercase tracking-widest opacity-60">Supports JPG, JPEG, PNG • Max file size: 5MB</p>
-                                                                  </div>
-                                                               </>
-                                                            )}
-                                                         </div>
-                                                      </div>
-
-                                                      <div className="space-y-4">
-                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] font-black uppercase text-main tracking-widest">Captions</span>
-                                                            <Info size={12} className="text-muted/50" />
-                                                         </div>
-                                                         <div className="relative">
-                                                            <ScrollText className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" size={18} />
-                                                            <input 
-                                                               type="text" 
-                                                               className="academy-input w-full h-14 bg-background/50 border border-glass-border px-16 text-xs font-bold focus:border-primary transition-all outline-none rounded-xl shadow-inner" 
-                                                               placeholder="Upload or link VTT/SRT captions file..." 
-                                                            />
-                                                         </div>
-                                                      </div>
+                                             {selectedActivity === 'video' && (
+                                                <div className="border border-glass-border rounded-[32px] overflow-hidden bg-surface shadow-xl">
+                                                   <div 
+                                                      onClick={() => setActiveAdvancedSection(activeAdvancedSection === 'video' ? '' : 'video')}
+                                                      className={`p-6 flex items-center justify-between cursor-pointer transition-colors ${activeAdvancedSection === 'video' ? 'bg-primary/5' : 'hover:bg-white/5'}`}
+                                                   >
+                                                      <span className="text-xs font-black uppercase tracking-widest text-main">Video Options</span>
+                                                      <ChevronDown size={18} className={`transition-transform duration-300 ${activeAdvancedSection === 'video' ? 'rotate-180' : ''}`} />
                                                    </div>
-                                                )}
-                                             </div>
+                                                   
+                                                   {activeAdvancedSection === 'video' && (
+                                                      <div className="p-10 space-y-10 animate-in slide-in-from-top-4 duration-300">
+                                                         <div className="space-y-4">
+                                                            <div className="flex items-center gap-2">
+                                                               <span className="text-[10px] font-black uppercase text-main tracking-widest">Video player size</span>
+                                                               <Info size={12} className="text-muted/50" />
+                                                            </div>
+                                                            <div className="flex items-center gap-6">
+                                                               <div className="relative flex-1 max-w-[200px]">
+                                                                  <input 
+                                                                     type="number" 
+                                                                     value={videoActivityForm.playerSizeWidth}
+                                                                     onChange={e => setVideoActivityForm({ ...videoActivityForm, playerSizeWidth: e.target.value })}
+                                                                     className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 pr-12 text-xs font-bold focus:border-primary transition-all outline-none rounded-xl" 
+                                                                  />
+                                                                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted uppercase">px</span>
+                                                               </div>
+                                                               <X size={14} className="text-muted opacity-40" />
+                                                               <div className="relative flex-1 max-w-[200px]">
+                                                                  <input 
+                                                                     type="number" 
+                                                                     value={videoActivityForm.playerSizeHeight}
+                                                                     onChange={e => setVideoActivityForm({ ...videoActivityForm, playerSizeHeight: e.target.value })}
+                                                                     className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 pr-12 text-xs font-bold focus:border-primary transition-all outline-none rounded-xl" 
+                                                                  />
+                                                                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted uppercase">px</span>
+                                                               </div>
+                                                            </div>
+                                                         </div>
+
+                                                         <div className="grid grid-cols-2 gap-10">
+                                                            <div className="space-y-4">
+                                                               <div className="flex items-center gap-2">
+                                                                  <span className="text-[10px] font-black uppercase text-main tracking-widest">Move forward</span>
+                                                                  <Info size={12} className="text-muted/50" />
+                                                               </div>
+                                                               <CompactToggle 
+                                                                  label={videoActivityForm.moveForward ? "Enabled" : "Disabled"} 
+                                                                  checked={videoActivityForm.moveForward} 
+                                                                  onChange={v => setVideoActivityForm({ ...videoActivityForm, moveForward: v })} 
+                                                               />
+                                                            </div>
+                                                            <div className="space-y-4">
+                                                               <div className="flex items-center gap-2">
+                                                                  <span className="text-[10px] font-black uppercase text-main tracking-widest">Responsive</span>
+                                                                  <Info size={12} className="text-muted/50" />
+                                                               </div>
+                                                               <CompactToggle 
+                                                                  label={videoActivityForm.responsive ? "Enabled" : "Disabled"} 
+                                                                  checked={videoActivityForm.responsive} 
+                                                                  onChange={v => setVideoActivityForm({ ...videoActivityForm, responsive: v })} 
+                                                               />
+                                                            </div>
+                                                         </div>
+
+                                                         <div className="space-y-4">
+                                                            <div className="flex items-center gap-2">
+                                                               <span className="text-[10px] font-black uppercase text-main tracking-widest">Poster image</span>
+                                                               <Info size={12} className="text-muted/50" />
+                                                            </div>
+                                                            <input 
+                                                               type="file" 
+                                                               ref={posterImageInputRef} 
+                                                               className="hidden" 
+                                                               accept="image/*"
+                                                               onChange={(e) => handleActivityFileUpload(e, 'posterImageUrl')} 
+                                                            />
+                                                            <div 
+                                                               onClick={() => posterImageInputRef.current?.click()}
+                                                               className="w-full h-48 border-2 border-dashed border-glass-border bg-background/30 rounded-3xl flex flex-col items-center justify-center gap-3 hover:border-primary/50 transition-all cursor-pointer group shadow-inner relative overflow-hidden"
+                                                            >
+                                                               {videoActivityForm.posterImageUrl ? (
+                                                                  <img src={videoActivityForm.posterImageUrl} className="w-full h-full object-cover" />
+                                                               ) : (
+                                                                  <>
+                                                                     <UploadCloud size={24} className="text-muted group-hover:text-primary transition-colors" />
+                                                                     <div className="text-center">
+                                                                        <p className="text-[11px] font-black text-main uppercase tracking-widest">Drag and drop image here, or click to <span className="text-primary underline">browse</span></p>
+                                                                        <p className="text-[9px] font-bold text-muted mt-1 uppercase tracking-widest opacity-60">Supports JPG, JPEG, PNG • Max file size: 5MB</p>
+                                                                     </div>
+                                                                  </>
+                                                               )}
+                                                            </div>
+                                                         </div>
+
+                                                         <div className="space-y-4">
+                                                            <div className="flex items-center gap-2">
+                                                               <span className="text-[10px] font-black uppercase text-main tracking-widest">Captions</span>
+                                                               <Info size={12} className="text-muted/50" />
+                                                            </div>
+                                                            <div className="relative">
+                                                               <ScrollText className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" size={18} />
+                                                               <input 
+                                                                  type="text" 
+                                                                  className="academy-input w-full h-14 bg-background/50 border border-glass-border px-16 text-xs font-bold focus:border-primary transition-all outline-none rounded-xl shadow-inner" 
+                                                                  placeholder="Upload or link VTT/SRT captions file..." 
+                                                               />
+                                                            </div>
+                                                         </div>
+                                                      </div>
+                                                   )}
+                                                </div>
+                                             )}
 
                                              {/* Restrict Access Section */}
                                              <div className="border border-glass-border rounded-[32px] overflow-hidden bg-surface shadow-xl">
@@ -1237,9 +1435,9 @@ export default function MasterAdminConsole() {
                                                       <div className="flex items-start gap-10">
                                                          <span className="w-40 text-[10px] font-black uppercase text-muted tracking-widest pt-2">Access restrictions</span>
                                                          <div className="flex-grow space-y-6">
-                                                            {videoActivityForm.restrictions.length > 0 ? (
+                                                            {(selectedActivity === 'pdf' ? pdfActivityForm.restrictions : videoActivityForm.restrictions).length > 0 ? (
                                                                <div className="space-y-3">
-                                                                  {videoActivityForm.restrictions.map((r, idx) => (
+                                                                  {(selectedActivity === 'pdf' ? pdfActivityForm.restrictions : videoActivityForm.restrictions).map((r, idx) => (
                                                                      <div key={idx} className="flex items-center justify-between p-4 bg-background border border-glass-border rounded-xl">
                                                                         <div className="flex items-center gap-3">
                                                                            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
@@ -1248,7 +1446,10 @@ export default function MasterAdminConsole() {
                                                                            <span className="text-[10px] font-black text-main uppercase tracking-widest">{r.title}</span>
                                                                         </div>
                                                                         <button 
-                                                                           onClick={() => setVideoActivityForm({ ...videoActivityForm, restrictions: videoActivityForm.restrictions.filter((_, i) => i !== idx) })}
+                                                                           onClick={() => {
+                                                                              const newRestrictions = (selectedActivity === 'pdf' ? pdfActivityForm.restrictions : videoActivityForm.restrictions).filter((_, i) => i !== idx);
+                                                                              selectedActivity === 'pdf' ? setPdfActivityForm({ ...pdfActivityForm, restrictions: newRestrictions }) : setVideoActivityForm({ ...videoActivityForm, restrictions: newRestrictions });
+                                                                           }}
                                                                            className="text-red-500 hover:text-red-600 p-2"
                                                                         >
                                                                            <X size={14} />
@@ -1298,8 +1499,8 @@ export default function MasterAdminConsole() {
                                                          </div>
                                                          <div className="relative flex-grow max-w-xl">
                                                             <select 
-                                                               value={videoActivityForm.completionTracking}
-                                                               onChange={e => setVideoActivityForm({ ...videoActivityForm, completionTracking: e.target.value })}
+                                                               value={selectedActivity === 'pdf' ? pdfActivityForm.completionTracking : videoActivityForm.completionTracking}
+                                                               onChange={e => selectedActivity === 'pdf' ? setPdfActivityForm({ ...pdfActivityForm, completionTracking: e.target.value }) : setVideoActivityForm({ ...videoActivityForm, completionTracking: e.target.value })}
                                                                className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 pr-12 text-xs font-bold appearance-none focus:border-primary transition-all outline-none rounded-xl shadow-inner"
                                                             >
                                                                <option value="none">Do not indicate activity completion</option>
@@ -1310,12 +1511,12 @@ export default function MasterAdminConsole() {
                                                          </div>
                                                       </div>
 
-                                                      {videoActivityForm.completionTracking === 'conditions' && (
+                                                      {(selectedActivity === 'pdf' ? pdfActivityForm.completionTracking : videoActivityForm.completionTracking) === 'conditions' && (
                                                          <div className="flex items-center gap-10 pl-10 border-l-2 border-primary/20">
                                                             <span className="w-40 text-[10px] font-black uppercase text-muted tracking-widest">Require View</span>
                                                             <label className="flex items-center gap-4 group cursor-pointer w-max">
-                                                               <div onClick={() => setVideoActivityForm({ ...videoActivityForm, requireView: !videoActivityForm.requireView })} className={`w-5 h-5 rounded-[6px] border-2 transition-all flex items-center justify-center ${videoActivityForm.requireView ? 'bg-primary border-primary' : 'border-glass-border group-hover:border-primary'}`}>
-                                                                  {videoActivityForm.requireView && <Plus size={14} className="text-white rotate-45" />}
+                                                               <div onClick={() => selectedActivity === 'pdf' ? setPdfActivityForm({ ...pdfActivityForm, requireView: !pdfActivityForm.requireView }) : setVideoActivityForm({ ...videoActivityForm, requireView: !videoActivityForm.requireView })} className={`w-5 h-5 rounded-[6px] border-2 transition-all flex items-center justify-center ${(selectedActivity === 'pdf' ? pdfActivityForm.requireView : videoActivityForm.requireView) ? 'bg-primary border-primary' : 'border-glass-border group-hover:border-primary'}`}>
+                                                                  {(selectedActivity === 'pdf' ? pdfActivityForm.requireView : videoActivityForm.requireView) && <Plus size={14} className="text-white rotate-45" />}
                                                                </div>
                                                                <span className="text-xs font-black text-main/80 uppercase tracking-widest">Student must view this activity to complete it</span>
                                                             </label>
@@ -1328,8 +1529,8 @@ export default function MasterAdminConsole() {
                                                             <Info size={12} className="text-muted/50" />
                                                          </div>
                                                          <label className="flex items-center gap-4 group cursor-pointer w-max">
-                                                            <div onClick={() => setVideoActivityForm({ ...videoActivityForm, courseCompletion: !videoActivityForm.courseCompletion })} className={`w-5 h-5 rounded-[6px] border-2 transition-all flex items-center justify-center ${videoActivityForm.courseCompletion ? 'bg-primary border-primary' : 'border-glass-border group-hover:border-primary'}`}>
-                                                               {videoActivityForm.courseCompletion && <Plus size={14} className="text-white rotate-45" />}
+                                                            <div onClick={() => selectedActivity === 'pdf' ? setPdfActivityForm({ ...pdfActivityForm, courseCompletion: !pdfActivityForm.courseCompletion }) : setVideoActivityForm({ ...videoActivityForm, courseCompletion: !videoActivityForm.courseCompletion })} className={`w-5 h-5 rounded-[6px] border-2 transition-all flex items-center justify-center ${(selectedActivity === 'pdf' ? pdfActivityForm.courseCompletion : videoActivityForm.courseCompletion) ? 'bg-primary border-primary' : 'border-glass-border group-hover:border-primary'}`}>
+                                                               {(selectedActivity === 'pdf' ? pdfActivityForm.courseCompletion : videoActivityForm.courseCompletion) && <Plus size={14} className="text-white rotate-45" />}
                                                             </div>
                                                             <span className="text-xs font-black text-main/80 uppercase tracking-widest">Must be completed to complete course</span>
                                                          </label>
@@ -1342,13 +1543,15 @@ export default function MasterAdminConsole() {
                                                          </div>
                                                          <div className="flex items-center gap-6">
                                                             <CompactToggle 
-                                                               label={videoActivityForm.completionDateEnabled ? "Enabled" : "Disabled"} 
-                                                               checked={videoActivityForm.completionDateEnabled} 
-                                                               onChange={v => setVideoActivityForm({ ...videoActivityForm, completionDateEnabled: v })} 
+                                                               label={(selectedActivity === 'pdf' ? pdfActivityForm.completionDateEnabled : videoActivityForm.completionDateEnabled) ? "Enabled" : "Disabled"} 
+                                                               checked={selectedActivity === 'pdf' ? pdfActivityForm.completionDateEnabled : videoActivityForm.completionDateEnabled} 
+                                                               onChange={v => selectedActivity === 'pdf' ? setPdfActivityForm({ ...pdfActivityForm, completionDateEnabled: v }) : setVideoActivityForm({ ...videoActivityForm, completionDateEnabled: v })} 
                                                             />
-                                                            {videoActivityForm.completionDateEnabled && (
+                                                            {(selectedActivity === 'pdf' ? pdfActivityForm.completionDateEnabled : videoActivityForm.completionDateEnabled) && (
                                                                <input 
                                                                   type="datetime-local" 
+                                                                  value={selectedActivity === 'pdf' ? pdfActivityForm.completionDate : videoActivityForm.completionDate}
+                                                                  onChange={e => selectedActivity === 'pdf' ? setPdfActivityForm({ ...pdfActivityForm, completionDate: e.target.value }) : setVideoActivityForm({ ...videoActivityForm, completionDate: e.target.value })}
                                                                   className="academy-input bg-background/50 border border-glass-border px-6 py-3 text-xs font-black uppercase rounded-xl outline-none focus:border-primary transition-all shadow-inner" 
                                                                />
                                                             )}
@@ -1364,7 +1567,7 @@ export default function MasterAdminConsole() {
                                     <div className="fixed bottom-0 right-0 left-[384px] p-6 bg-background/80 backdrop-blur-xl border-t border-glass-border flex gap-4 z-[50] justify-end">
                                        <button 
                                           onClick={handleSaveActivity} 
-                                          disabled={loading || !videoActivityForm.name}
+                                          disabled={loading || !(selectedActivity === 'pdf' ? pdfActivityForm.name : videoActivityForm.name)}
                                           className="px-10 py-4 bg-primary text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-primary/30 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center gap-3"
                                        >
                                           {loading && <Loader2 size={14} className="animate-spin" />}
@@ -1372,7 +1575,7 @@ export default function MasterAdminConsole() {
                                        </button>
                                        <button 
                                           onClick={handleSaveActivity}
-                                          disabled={loading || !videoActivityForm.name}
+                                          disabled={loading || !(selectedActivity === 'pdf' ? pdfActivityForm.name : videoActivityForm.name)}
                                           className="px-10 py-4 bg-surface border border-glass-border text-main rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg hover:bg-white/5 transition-all disabled:opacity-50"
                                        >
                                           Save And Display
@@ -1402,6 +1605,48 @@ export default function MasterAdminConsole() {
                             </div>
 
                             <div className="bg-surface border border-glass-border rounded-[32px] p-10 shadow-xl space-y-8">
+                               <div className="space-y-4">
+                                  <div className="flex items-center gap-2">
+                                     <span className="text-[10px] font-black uppercase text-main tracking-widest">Quick Select Groups</span>
+                                     <Info size={12} className="text-muted/50" />
+                                  </div>
+                                  <div className="flex gap-4">
+                                     {[
+                                        { id: 5, name: 'Students', icon: <Users size={16} />, color: 'bg-blue-500' },
+                                        { id: 3, name: 'Teachers', icon: <ShieldCheck size={16} />, color: 'bg-orange-500' }
+                                     ].map(group => (
+                                        <button 
+                                           key={group.id}
+                                           onClick={() => {
+                                              const usersInGroup = data.users.filter(u => {
+                                                 const assignment = data.systemAssignments?.find(a => parseInt(a.userid) === parseInt(u.id));
+                                                 const roleId = assignment ? parseInt(assignment.roleid) : 5; // Default to student
+                                                 return roleId === group.id;
+                                              });
+                                              const ids = usersInGroup.map(u => u.id);
+                                              setEnrolledUserIds([...new Set([...enrolledUserIds, ...ids])]);
+                                              const newRoles = { ...enrolledRoles };
+                                              ids.forEach(id => { newRoles[id] = group.id; });
+                                              setEnrolledRoles(newRoles);
+                                              alert(`Selected all ${group.name}`);
+                                           }}
+                                           className="flex items-center gap-3 px-6 py-3 bg-white/5 border border-glass-border rounded-2xl hover:border-primary transition-all group"
+                                        >
+                                           <div className={`w-8 h-8 rounded-xl ${group.color} text-white flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                                              {group.icon}
+                                           </div>
+                                           <span className="text-[10px] font-black uppercase text-main tracking-widest">{group.name}</span>
+                                        </button>
+                                     ))}
+                                     <button 
+                                        onClick={() => { setEnrolledUserIds([]); setEnrolledRoles({}); }}
+                                        className="px-6 py-3 text-[10px] font-black uppercase text-red-500 tracking-widest hover:underline ml-auto"
+                                     >
+                                        Clear All
+                                     </button>
+                                  </div>
+                               </div>
+
                                <div className="grid grid-cols-2 gap-6 max-h-[500px] overflow-y-auto p-4 custom-scrollbar">
                                   {data.users.map(u => (
                                      <div 
@@ -1413,6 +1658,7 @@ export default function MasterAdminConsole() {
                                               setEnrolledUserIds(enrolledUserIds.filter(id => id !== u.id));
                                            } else {
                                               setEnrolledUserIds([...enrolledUserIds, u.id]);
+                                              if (!enrolledRoles[u.id]) setEnrolledRoles({...enrolledRoles, [u.id]: 5});
                                            }
                                         }}>
                                            <div className="w-10 h-10 rounded-full bg-surface border border-glass-border flex items-center justify-center font-black text-primary">{u.fullname?.[0] || 'U'}</div>
@@ -1423,27 +1669,17 @@ export default function MasterAdminConsole() {
                                         </div>
                                         
                                         <div className="flex items-center gap-4">
-                                           {enrolledUserIds.includes(u.id) && (
-                                              <select 
-                                                 value={enrolledRoles[u.id] || 5} 
-                                                 onChange={(e) => setEnrolledRoles({...enrolledRoles, [u.id]: parseInt(e.target.value)})}
-                                                 className="bg-surface border border-glass-border rounded-xl px-3 py-1.5 text-[10px] uppercase font-black tracking-widest text-main outline-none focus:border-primary"
-                                              >
-                                                 <option value={5}>Student</option>
-                                                 <option value={3}>Teacher</option>
-                                                 <option value={4}>Non-editing Teacher</option>
-                                              </select>
-                                           )}
                                            <div 
                                               onClick={() => {
                                                  if (enrolledUserIds.includes(u.id)) {
                                                     setEnrolledUserIds(enrolledUserIds.filter(id => id !== u.id));
                                                  } else {
                                                     setEnrolledUserIds([...enrolledUserIds, u.id]);
+                                                    if (!enrolledRoles[u.id]) setEnrolledRoles({...enrolledRoles, [u.id]: 5});
                                                  }
                                               }}
-                                              className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-all ${enrolledUserIds.includes(u.id) ? 'bg-primary border-primary text-white' : 'border-glass-border'}`}>
-                                              {enrolledUserIds.includes(u.id) && <Check size={14} />}
+                                              className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center cursor-pointer transition-all ${enrolledUserIds.includes(u.id) ? 'bg-primary border-primary text-white shadow-lg' : 'border-glass-border'}`}>
+                                              {enrolledUserIds.includes(u.id) && <Check size={18} />}
                                            </div>
                                         </div>
                                      </div>
@@ -1640,12 +1876,18 @@ export default function MasterAdminConsole() {
                <div className="bg-surface w-full max-w-5xl border border-glass-border rounded-3xl shadow-3xl flex h-[80vh] overflow-hidden">
 
                   <div className="w-64 bg-surface-hover/30 border-r border-glass-border flex flex-col p-6">
-                     <div className="mb-8 text-primary"><UserPlus size={32} /></div>
+                     <div className="mb-8 text-primary">{showModal.includes('Course') ? <BookOpen size={32} /> : <UserPlus size={32} />}</div>
                      <h3 className="text-lg font-black italic uppercase mb-6 text-main/90">{showModal}</h3>
                      <nav className="space-y-1.5">
-                        <ModalNav active={modalSection === 'general'} icon={<ScrollText size={14} />} label="General" onClick={() => setModalSection('general')} />
-                        <ModalNav active={modalSection === 'userpicture'} icon={<Camera size={14} />} label="User Picture" onClick={() => setModalSection('userpicture')} />
-                        <ModalNav active={modalSection === 'optional'} icon={<LayoutGrid size={14} />} label="Institutional" onClick={() => setModalSection('optional')} />
+                        {showModal === 'Edit Course' ? (
+                           <ModalNav active={true} icon={<ScrollText size={14} />} label="General Info" onClick={() => {}} />
+                        ) : (
+                           <>
+                              <ModalNav active={modalSection === 'general'} icon={<ScrollText size={14} />} label="General" onClick={() => setModalSection('general')} />
+                              <ModalNav active={modalSection === 'userpicture'} icon={<Camera size={14} />} label="User Picture" onClick={() => setModalSection('userpicture')} />
+                              <ModalNav active={modalSection === 'optional'} icon={<LayoutGrid size={14} />} label="Institutional" onClick={() => setModalSection('optional')} />
+                           </>
+                        )}
                      </nav>
                   </div>
 
@@ -1653,7 +1895,18 @@ export default function MasterAdminConsole() {
                      <button onClick={() => setShowModal(false)} className="absolute right-6 top-6 p-2.5 bg-background border border-glass-border rounded-xl hover:bg-red-500 hover:text-white hover:border-red-500 transition-all z-10 focus:outline-none"><X size={20} /></button>
 
                      <div className="flex-grow overflow-y-auto p-10 custom-scrollbar">
-                        {modalSection === 'general' && (
+                        {showModal === 'Edit Course' ? (
+                           <div className="space-y-8 animate-in fade-in duration-500">
+                              <div className="grid grid-cols-1 gap-6 p-6 bg-background/30 rounded-2xl border border-glass-border">
+                                 <CompactInput label="Course Fullname" value={courseForm.fullname} onChange={v => setCourseForm({ ...courseForm, fullname: v })} req />
+                                 <CompactSelect label="Category" value={courseForm.categoryid} options={[{ v: '', l: 'Select Category' }, ...data.categories.map(c => ({ v: c.id, l: c.name }))]} onChange={v => setCourseForm({ ...courseForm, categoryid: v })} />
+                              </div>
+                              <div className="space-y-3">
+                                 <label className="text-[9px] font-black uppercase text-muted tracking-widest">Course Summary</label>
+                                 <textarea value={courseForm.summary} onChange={e => setCourseForm({ ...courseForm, summary: e.target.value })} className="academy-input w-full h-48 bg-background/50 border border-glass-border p-6 text-xs font-bold focus:border-primary transition-all outline-none resize-none" placeholder="Describe what students will learn in this course" />
+                              </div>
+                           </div>
+                        ) : modalSection === 'general' && (
                            <div className="space-y-8 animate-in fade-in duration-500">
                               <div className="grid grid-cols-3 gap-6 p-6 bg-background/30 rounded-2xl border border-glass-border">
                                  <CompactInput label="Username" value={form.username} onChange={v => setForm({ ...form, username: v })} req />
@@ -1717,7 +1970,7 @@ export default function MasterAdminConsole() {
 
                      <div className="p-10 border-t border-glass-border flex gap-6 bg-white/5 items-center justify-end px-12">
                         <p className="mr-auto text-[9px] font-black text-primary uppercase tracking-[0.3em]">Validation Status: Safe to Commit</p>
-                        <button onClick={handleInitialize} className="bg-primary text-white px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all"> {showModal === 'Edit User' ? 'Update User' : 'Initialize account'} </button>
+                        <button onClick={handleInitialize} className="bg-primary text-white px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all"> {showModal === 'Add User' ? 'Initialize account' : 'Update Record'} </button>
                         <button onClick={() => setShowModal(false)} className="bg-white/5 px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-widest text-muted hover:bg-glass-border transition-all">Cancel</button>
                      </div>
                   </div>

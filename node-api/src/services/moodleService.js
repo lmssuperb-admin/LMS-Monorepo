@@ -132,6 +132,18 @@ class MoodleService {
     });
   }
 
+  async updateCourse(id, c) {
+    return this.request('core_course_update_courses', {
+      courses: [{
+        id: parseInt(id),
+        fullname: c.fullname,
+        categoryid: c.categoryid,
+        summary: c.summary,
+        summaryformat: 1
+      }]
+    });
+  }
+
   async deleteCourses(courseids) {
     return this.request('core_course_delete_courses', { courseids: courseids.map(id => parseInt(id)) });
   }
