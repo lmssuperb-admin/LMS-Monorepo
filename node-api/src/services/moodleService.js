@@ -132,6 +132,62 @@ class MoodleService {
     });
   }
 
+  async deleteCourses(courseids) {
+    return this.request('core_course_delete_courses', { courseids: courseids.map(id => parseInt(id)) });
+  }
+
+  async getCourseContents(courseid) {
+    return this.request('core_course_get_contents', { courseid: parseInt(courseid) });
+  }
+
+  async createActivity(a) {
+    console.log(`🚀 [ACTIVITY] Creating ${a.type} for course ${a.courseid}`);
+    
+    // 1. Resolve section ID
+    let sectionId = a.sectionid;
+    try {
+      const contents = await this.getCourseContents(a.courseid);
+      console.log(`📦 [ACTIVITY] Course ${a.courseid} has ${contents?.length || 0} sections`);
+      
+      const sectionIndex = parseInt(a.section) || 0;
+      if (contents && contents[sectionIndex]) {
+        sectionId = contents[sectionIndex].id;
+        console.log(`✅ [ACTIVITY] Resolved section index ${sectionIndex} to ID ${sectionId}`);
+      } else if (contents && contents.length > 0) {
+        sectionId = contents[0].id;
+        console.log(`⚠️ [ACTIVITY] Section index ${sectionIndex} not found, using first section (ID ${sectionId})`);
+      }
+    } catch (err) {
+      console.error('❌ [ACTIVITY] Failed to resolve section ID:', err.message);
+    }
+
+    // 2. Map activity type to standard Moodle modules if it's 'video'
+    let modname = a.type || 'video';
+    if (modname === 'video') {
+       modname = a.videoType === 'link' ? 'url' : 'resource';
+    }
+
+    return this.request('core_course_create_module', {
+      modname: modname,
+      courseid: parseInt(a.courseid),
+      sectionid: parseInt(sectionId) || 0,
+      visible: 1,
+      options: [
+        { name: 'name', value: a.name },
+        { name: 'intro', value: a.description || '' },
+        { name: 'introformat', value: '1' },
+        { name: 'displayintro', value: a.displayDescription ? '1' : '0' },
+        { name: 'externalurl', value: a.videoUrl || '' }, // for 'url' module
+        { name: 'width', value: a.playerSizeWidth || '800' },
+        { name: 'height', value: a.playerSizeHeight || '500' },
+        { name: 'moveforward', value: a.moveForward ? '1' : '0' },
+        { name: 'responsive', value: a.responsive ? '1' : '0' },
+        { name: 'completion', value: a.completionTracking === 'manual' ? '1' : (a.completionTracking === 'conditions' ? '2' : '0') },
+        { name: 'completionview', value: a.requireView ? '1' : '0' }
+      ]
+    });
+  }
+
   // --- 🔐 PERMISSIONS (With Local Fallback Cache for System Roles) ---
   getLocalAssignments() {
     const fs = require('fs');

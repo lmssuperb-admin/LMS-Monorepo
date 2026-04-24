@@ -5,7 +5,7 @@ import {
    MoreVertical, Edit2, X, ChevronRight, Filter, Globe, Database,
    UserPlus, Mail, MapPin, Key, Lock, CheckSquare, Square, ChevronDown,
    Info, Camera, PlusCircle, Tag, Phone, Home, Building, LayoutGrid, ScrollText,
-   Building2, Smartphone, Type, List, Link, Image, Video, UploadCloud, ChevronUp
+   Building2, Smartphone, Type, List, Link, Image, Video, UploadCloud, ChevronUp, FilePlus, Sparkles, Play, FileText, BrainCircuit, PenTool, HelpCircle, FolderOpen, Check
 } from 'lucide-react';
 
 function formatRelativeTime(seconds) {
@@ -29,6 +29,8 @@ export default function MasterAdminConsole() {
    const [activeMenu, setActiveMenu] = useState(null);
    const [modalSection, setModalSection] = useState('general');
    const fileInputRef = useRef(null);
+   const activityFileInputRef = useRef(null);
+   const posterImageInputRef = useRef(null);
    const [searchQuery, setSearchQuery] = useState('');
    const [activeFilters, setActiveFilters] = useState(['name', 'email']);
    const [filterByRole, setFilterByRole] = useState('all');
@@ -39,7 +41,15 @@ export default function MasterAdminConsole() {
 
    const [courseForm, setCourseForm] = useState({ fullname: '', categoryid: '', summary: '', imageurl: '' });
    const [categoryForm, setCategoryForm] = useState({ name: '', parent: '0', idnumber: '', description: '' });
-   const [courseStep, setCourseStep] = useState(2);
+   const [courseStep, setCourseStep] = useState(1);
+   const [courseTopics, setCourseTopics] = useState([
+      { id: 1, name: 'Topic 1', activities: [] },
+      { id: 2, name: 'Topic 2', activities: [] },
+      { id: 3, name: 'Topic 3', activities: [] },
+   ]);
+   const [enrolledUserIds, setEnrolledUserIds] = useState([]);
+   const [enrolledRoles, setEnrolledRoles] = useState({});
+   const [activeTopicId, setActiveTopicId] = useState(1);
    const [createdCourse, setCreatedCourse] = useState(null);
    const [showActivityModal, setShowActivityModal] = useState(false);
    const [selectedActivity, setSelectedActivity] = useState('');
@@ -49,6 +59,26 @@ export default function MasterAdminConsole() {
       { id: 1, name: 'Basics Of Java', type: 'book', topic: 1 }
    ]);
    const [newActivityForm, setNewActivityForm] = useState({ name: '', description: '' });
+   const [videoActivityForm, setVideoActivityForm] = useState({
+      name: '',
+      description: '',
+      displayDescription: false,
+      videoType: 'upload', // 'upload' or 'link'
+      videoUrl: '',
+      playerSizeWidth: '800',
+      playerSizeHeight: '500',
+      moveForward: false,
+      responsive: true,
+      posterImageUrl: '',
+      captions: '',
+      completionTracking: 'manual', // 'none', 'manual', 'conditions'
+      requireView: false,
+      courseCompletion: false,
+      completionDate: '',
+      completionDateEnabled: false,
+      restrictions: [],
+   });
+   const [activeAdvancedSection, setActiveAdvancedSection] = useState('video');
 
    const [form, setForm] = useState({
       username: '', auth: 'manual', suspended: false, generatepass: false, password: '', forcechange: false,
@@ -168,26 +198,80 @@ export default function MasterAdminConsole() {
       setLoading(false);
    };
 
-   const handleCreateCourseFinal = async () => {
+   const handleCreateCourseFinal = () => {
+      if (!courseForm.fullname || !courseForm.categoryid) {
+         alert("Please fill in course name and category.");
+         return;
+      }
+      setCourseStep(3); // Move to Content Builder
+   };
+
+   const handlePublishCourse = async () => {
       setLoading(true);
       try {
-         const payload = {
+         // 1. Create Course
+         const coursePayload = {
             ...courseForm,
             shortname: courseForm.fullname.toLowerCase().replace(/[^a-z0-9]/g, '') + '-' + Math.floor(Math.random() * 1000)
          };
-         const res = await fetch('http://localhost:4000/api/courses', {
+         const course = await fetch('http://localhost:4000/api/courses', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(coursePayload)
          }).then(r => r.json());
 
-         if (res.error) throw new Error(res.error);
-         setCreatedCourse({ ...res, imageurl: courseForm.imageurl });
-         setCourseStep(4); // Success Course Overview view
+         if (course.error) throw new Error(course.error);
+
+         // 2. Add Activities
+         for (let i = 0; i < courseTopics.length; i++) {
+            const topic = courseTopics[i];
+            for (const act of topic.activities) {
+               await fetch(`http://localhost:4000/api/courses/${course.id}/activities`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ...act, section: i })
+               });
+            }
+         }
+
+         // 3. Enroll Users
+         for (const userId of enrolledUserIds) {
+            const roleid = enrolledRoles[userId] || 5; // Default to student
+            await fetch('http://localhost:4000/api/roles/assign', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ userid: userId, roleid: roleid, contextlevel: 'course', instanceid: course.id })
+            });
+         }
+
+         setCreatedCourse(course);
+         setCourseStep(6); // Success
+         alert('Course Published Successfully!');
       } catch (err) {
-         alert("Failed to create course: " + err.message);
+         alert("Publication failed: " + err.message);
       }
       setLoading(false);
+   };
+
+   const handleSaveActivity = () => {
+      const newActivity = {
+         ...videoActivityForm,
+         id: `temp-${Date.now()}`,
+         type: selectedActivity,
+      };
+      
+      setCourseTopics(prev => prev.map(t => 
+         t.id === activeTopicId ? { ...t, activities: [...t.activities, newActivity] } : t
+      ));
+      
+      setActiveCourseView('dashboard');
+      // Reset form
+      setVideoActivityForm({
+         name: '', description: '', displayDescription: false, videoType: 'upload', videoUrl: '',
+         playerSizeWidth: '800', playerSizeHeight: '500', moveForward: false, responsive: true,
+         posterImageUrl: '', captions: '', completionTracking: 'manual', requireView: false,
+         courseCompletion: false, completionDate: '', completionDateEnabled: false, restrictions: [],
+      });
    };
 
    const handleCreateCategory = async () => {
@@ -231,6 +315,22 @@ export default function MasterAdminConsole() {
       } catch (err) {
          alert("Operation failed: " + err.message);
       }
+      setLoading(false);
+   };
+
+   const handleActivityFileUpload = async (e, field) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      setLoading(true);
+      const formData = new FormData();
+      formData.append('image', file);
+      try {
+         const res = await fetch('http://localhost:4000/api/system/upload', { method: 'POST', body: formData }).then(r => r.json());
+         if (res.url) {
+            setVideoActivityForm(prev => ({ ...prev, [field]: res.url }));
+            alert('File uploaded successfully!');
+         }
+      } catch (err) { alert('Upload failed'); }
       setLoading(false);
    };
 
@@ -630,7 +730,10 @@ export default function MasterAdminConsole() {
                   <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
                      {courseStep < 4 && (
                         <div className="flex items-center gap-4 mb-10 text-[10px] font-black uppercase tracking-widest text-muted">
-                           <span className="cursor-pointer hover:text-main">Choose Creation Method</span> <ChevronRight size={14} />
+                           <div className={`flex items-center gap-2 ${courseStep >= 1 ? 'text-primary' : ''}`}>
+                              <span className={`w-6 h-6 rounded-full flex items-center justify-center ${courseStep >= 1 ? 'bg-primary text-white' : 'bg-primary/20 text-primary'}`}>1</span>
+                              Creation Method
+                           </div> <ChevronRight size={14} />
                            <div className={`flex items-center gap-2 ${courseStep >= 2 ? 'text-primary' : ''}`}>
                               <span className={`w-6 h-6 rounded-full flex items-center justify-center ${courseStep >= 2 ? 'bg-primary text-white' : 'bg-primary/20 text-primary'}`}>2</span>
                               Configure Course
@@ -638,6 +741,34 @@ export default function MasterAdminConsole() {
                            <div className={`flex items-center gap-2 ${courseStep >= 3 ? 'text-primary' : ''}`}>
                               <span className={`w-6 h-6 rounded-full flex items-center justify-center ${courseStep >= 3 ? 'bg-primary text-white' : 'bg-primary/20 text-primary'}`}>3</span>
                               Course Image
+                           </div>
+                        </div>
+                     )}
+
+                     {courseStep === 1 && (
+                        <div className="bg-surface border border-glass-border rounded-3xl p-10 shadow-xl space-y-8">
+                           <div className="space-y-2 mb-8">
+                              <h3 className="text-xl font-black text-main">Choose Creation Method</h3>
+                              <p className="text-muted text-[10px] uppercase tracking-widest font-bold">How would you like to start building your new course?</p>
+                           </div>
+
+                           <div className="grid grid-cols-2 gap-8 max-w-3xl">
+                              <div onClick={() => setCourseStep(2)} className="bg-background/50 border border-glass-border rounded-[24px] p-8 cursor-pointer hover:border-primary hover:shadow-2xl hover:shadow-primary/20 transition-all group flex flex-col items-center text-center">
+                                 <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                                    <FilePlus size={28} />
+                                 </div>
+                                 <h4 className="text-sm font-black text-main uppercase tracking-widest">Start from Scratch</h4>
+                                 <p className="text-xs text-muted font-bold mt-3 leading-relaxed">Build a completely blank course and structure it manually with your own content.</p>
+                              </div>
+
+                              <div className="bg-background/50 border border-glass-border rounded-[24px] p-8 opacity-50 cursor-not-allowed flex flex-col items-center text-center relative overflow-hidden">
+                                 <div className="absolute top-4 right-4 px-3 py-1 bg-white/10 rounded-full text-[9px] font-black uppercase tracking-widest text-muted">Coming Soon</div>
+                                 <div className="w-16 h-16 rounded-2xl bg-white/5 text-muted flex items-center justify-center mb-6">
+                                    <Sparkles size={28} />
+                                 </div>
+                                 <h4 className="text-sm font-black text-main uppercase tracking-widest">AI Generated</h4>
+                                 <p className="text-xs text-muted font-bold mt-3 leading-relaxed">Let Antigravity AI generate a complete course structure and outline based on a topic.</p>
+                              </div>
                            </div>
                         </div>
                      )}
@@ -725,367 +856,655 @@ export default function MasterAdminConsole() {
 
                            <div className="flex justify-center gap-8 pt-10 border-t border-glass-border">
                               <button onClick={() => setCourseStep(2)} className="px-12 py-4 rounded-xl font-black text-[11px] uppercase tracking-widest bg-surface border border-glass-border text-muted hover:text-main hover:bg-white/5 transition-all">Back</button>
-                              <button onClick={handleCreateCourseFinal} disabled={loading} className="px-12 py-4 rounded-xl font-black text-[11px] uppercase tracking-widest bg-primary text-white shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 disabled:opacity-50 transition-all flex items-center gap-3">
-                                 {loading ? <Loader2 size={16} className="animate-spin" /> : null} Create Course
+                              <button onClick={() => setCourseStep(4)} disabled={loading} className="px-12 py-4 rounded-xl font-black text-[11px] uppercase tracking-widest bg-primary text-white shadow-xl shadow-primary/30 hover:scale-105 active:scale-95 disabled:opacity-50 transition-all flex items-center gap-3">
+                                 Next: Course Content
                               </button>
                            </div>
                         </div>
                      )}
 
-                     {courseStep === 4 && createdCourse && (
-                        <div className="animate-in slide-in-from-bottom-5 duration-700 fade-in">
-                           <div className="flex items-center justify-between mb-6">
-                              <div className="flex gap-2 p-1.5 bg-surface rounded-2xl border border-glass-border font-black text-[10px] uppercase tracking-widest shadow-sm">
-                                 <button className="bg-primary text-white px-6 py-3 rounded-[14px] shadow-md">Course Overview</button>
-                                 <button className="text-muted hover:text-main px-6 py-3 rounded-[14px] transition-all">Participants</button>
-                                 <button className="text-muted hover:text-main px-6 py-3 rounded-[14px] transition-all">Reports</button>
-                                 <button className="text-muted hover:text-main px-4 py-3 rounded-[14px] transition-all"><ChevronRight size={14} /></button>
-                              </div>
-                              <div className="flex items-center gap-6">
-                                 <div className="flex items-center gap-3 bg-surface p-2 rounded-2xl border border-glass-border">
-                                    <span className="text-[10px] font-black uppercase text-primary ml-2">Edit</span>
-                                    <div className="w-10 h-5 bg-primary rounded-full relative shadow-inner"><div className="w-3 h-3 bg-white rounded-full absolute top-1 right-1"></div></div>
-                                    <span className="text-[10px] font-black uppercase text-muted ml-2 mr-2 opacity-50">Preview</span>
+                     {courseStep === 4 && (
+                        <div className="animate-in slide-in-from-bottom-5 duration-700 fade-in pb-20">
+                           <div className="flex items-center justify-between mb-8">
+                              <div className="flex gap-4 items-center">
+                                 <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
+                                    <LayoutGrid size={24} />
                                  </div>
-                                 <button className="p-2 bg-surface border border-glass-border rounded-xl text-muted hover:text-main shadow-sm"><MoreVertical size={16} /></button>
+                                 <div>
+                                    <h3 className="text-xl font-black text-main uppercase italic">Course Content Builder</h3>
+                                    <p className="text-muted text-[10px] uppercase font-bold tracking-widest mt-1">Structure your course with topics and activities</p>
+                                 </div>
                               </div>
+                              <button onClick={() => setCourseStep(5)} className="px-10 py-4 bg-primary text-white rounded-xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-primary/30 hover:scale-105 transition-all flex items-center gap-3">
+                                 Next: Enroll Participants <ChevronRight size={14} />
+                              </button>
                            </div>
 
-                           <div className="flex gap-6 items-start">
-                              {/* Left Panel: Topics */}
+                           <div className="flex gap-8 items-start">
                               <div className="w-[320px] bg-surface/80 backdrop-blur-xl border border-glass-border rounded-[32px] p-6 shadow-xl flex-shrink-0 sticky top-24">
                                  <div className="flex justify-between items-center mb-6">
-                                    <h4 className="font-black italic text-main text-sm truncate pr-4">{createdCourse.fullname}</h4>
-                                    <button className="p-2 border border-glass-border rounded-lg text-muted"><LayoutGrid size={12} /></button>
+                                    <h4 className="font-black italic text-main text-sm truncate pr-4">{courseForm.fullname}</h4>
+                                    <button className="p-2 border border-glass-border rounded-lg text-muted"><BookOpen size={12} /></button>
                                  </div>
-                                 <div className="relative mb-6">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={14} />
-                                    <input className="w-full bg-background/80 border border-glass-border rounded-2xl pl-12 pr-4 py-4 text-[11px] outline-none font-bold placeholder-muted focus:border-primary transition-all shadow-inner" placeholder="Search..." />
-                                 </div>
-
+                                 
                                  <div className="space-y-6">
-                                    {[0, 1, 2].map((i) => (
-                                       <div key={i} className="mb-6">
-                                          <h4 className="text-[12px] font-black uppercase text-muted tracking-widest pl-7 flex items-center justify-between group cursor-pointer hover:text-white transition-colors">
+                                    {courseTopics.map((topic, tidx) => (
+                                       <div key={topic.id} className="mb-6">
+                                          <h4 className={`text-[12px] font-black uppercase tracking-widest pl-7 flex items-center justify-between group cursor-pointer transition-colors ${activeTopicId === topic.id ? 'text-primary' : 'text-muted hover:text-white'}`} onClick={() => setActiveTopicId(topic.id)}>
                                              <div className="flex items-center gap-3">
-                                                Topic {i + 1}
+                                                {topic.name}
                                              </div>
-                                             <ChevronDown size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                             <ChevronDown size={14} />
                                           </h4>
                                           <div className="space-y-3 mt-4 relative">
                                              <div className="absolute -left-[19px] top-4 bottom-8 w-px bg-glass-border"></div>
 
-                                             {activities.filter(a => a.topic === (i + 1)).length > 0 ? (
-                                                activities.filter(a => a.topic === (i + 1)).map((act, index) => (
+                                             {topic.activities.length > 0 ? (
+                                                topic.activities.map((act) => (
                                                    <div key={act.id} className="relative pl-7 group">
                                                       <div className="absolute -left-5 top-1/2 -translate-y-1/2 w-4 h-px bg-glass-border"></div>
                                                       <div className="absolute -left-[23px] top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-primary bg-background shadow-[0_0_8px_rgba(var(--primary),0.8)] z-10"></div>
-                                                      <div className="flex items-center justify-between p-3 bg-white/5 rounded-2xl border border-glass-border group-hover:border-primary/50 transition-colors shadow-sm cursor-pointer">
+                                                      <div className="flex items-center justify-between p-3 bg-white/5 rounded-2xl border border-glass-border group-hover:border-primary/50 transition-colors shadow-sm">
                                                          <div className="flex items-center gap-3">
                                                             <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                                                               <BookOpen size={14} />
+                                                               {act.type === 'video' ? <Play size={14} /> : <BookOpen size={14} />}
                                                             </div>
-                                                            <span className="text-[10px] font-black tracking-widest text-main">{act.name}</span>
-                                                         </div>
-                                                         <div className="flex gap-1">
-                                                            <button className="p-1 hover:bg-white/10 rounded"><MoreVertical size={14} className="text-muted" /></button>
-                                                            <button className="p-1 hover:bg-white/10 rounded"><ChevronDown size={14} className="text-muted" /></button>
+                                                            <span className="text-[10px] font-black tracking-widest text-main truncate max-w-[120px]">{act.name}</span>
                                                          </div>
                                                       </div>
                                                    </div>
                                                 ))
                                              ) : (
-                                                <p className="text-[10px] font-bold text-muted uppercase tracking-widest pl-7 bg-white/5 py-2 rounded-lg inline-block">No content added</p>
+                                                <p className="text-[10px] font-bold text-muted uppercase tracking-widest pl-7 italic opacity-50">Empty topic</p>
                                              )}
 
-                                             <br />
-                                             <button onClick={() => setShowActivityModal(true)} className="ml-7 py-2.5 px-5 bg-primary/5 text-primary border border-primary/20 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-primary hover:text-white transition-all inline-flex items-center justify-center gap-2 shadow-sm">
-                                                <Plus size={12} /> Add Activity
+                                             <button onClick={() => { setActiveTopicId(topic.id); setShowActivityModal(true); }} className="ml-7 mt-2 py-2 px-4 bg-primary/5 text-primary border border-primary/20 rounded-xl text-[8px] font-black uppercase tracking-widest hover:bg-primary hover:text-white transition-all inline-flex items-center gap-2">
+                                                <Plus size={10} /> Add Activity
                                              </button>
                                           </div>
                                        </div>
                                     ))}
-                                    <div className="pt-4 border-t border-glass-border">
-                                       <button className="w-full py-4 bg-background text-primary border-2 border-primary/20 border-dashed rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2 shadow-sm">
-                                          <Plus size={14} /> Add Topics
-                                       </button>
-                                    </div>
                                  </div>
                               </div>
 
-                              {activeCourseView === 'dashboard' && (
-                                 <>
-                                    {/* Middle Panel: Hero & Overview */}
-                                    <div className="flex-grow space-y-8 min-w-0">
-                                       <div className="w-full h-80 bg-primary rounded-[32px] overflow-hidden relative shadow-2xl border border-glass-border">
-                                          {courseForm.imageurl ? (
-                                             <img src={courseForm.imageurl} className="w-full h-full object-cover" />
-                                          ) : (
-                                             <div className="absolute inset-0 bg-gradient-to-tr from-blue-600 via-indigo-600 to-primary" />
-                                          )}
-                                          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-                                          <div className="absolute bottom-8 left-10 right-10 flex flex-col items-start">
-                                             <h2 className="text-4xl font-black text-white italic tracking-tight drop-shadow-lg mb-6">{createdCourse.fullname}</h2>
-                                             <div className="w-full flex items-center gap-6 bg-surface/40 backdrop-blur-md p-3 rounded-2xl border border-white/10">
-                                                <div className="flex-grow bg-black/40 h-3 rounded-full overflow-hidden shadow-inner"><div className="w-[0%] h-full bg-primary shadow-[0_0_10px_rgba(var(--primary),0.8)]" /></div>
-                                                <span className="text-white text-[12px] font-black bg-black/40 px-3 py-1 rounded-full">0%</span>
-                                                <button className="bg-primary text-white ml-auto px-10 py-3.5 rounded-xl font-black text-[11px] uppercase tracking-widest shadow-xl shadow-primary/40 hover:scale-105 active:scale-95 transition-all">Start</button>
-                                             </div>
-                                          </div>
+                               {/* Right Panel: Active View */}
+                               <div className="flex-grow min-w-0">
+                                  {activeCourseView === 'dashboard' ? (
+                                     <div className="bg-surface border border-glass-border rounded-[32px] p-12 text-center space-y-6 shadow-xl">
+                                        <div className="w-24 h-24 bg-primary/10 rounded-3xl flex items-center justify-center text-primary mx-auto">
+                                           <LayoutGrid size={40} />
+                                        </div>
+                                        <h3 className="text-2xl font-black text-main uppercase italic">Topic {activeTopicId} Content</h3>
+                                        <p className="text-muted text-sm max-w-md mx-auto leading-relaxed">Add activities and materials to this section using the button in the sidebar.</p>
+                                        
+                                        <div className="grid grid-cols-2 gap-4 max-w-2xl mx-auto">
+                                           <div className="bg-white/5 border border-glass-border p-6 rounded-2xl text-left hover:border-primary transition-all cursor-pointer group flex flex-col h-full" onClick={() => { setSelectedActivity('video'); setActiveCourseView('add-activity'); }}>
+                                              <div className="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Play size={18} /></div>
+                                              <h4 className="text-xs font-black text-main uppercase">Add Video</h4>
+                                              <p className="text-[10px] text-muted mt-1 uppercase font-bold flex-grow">Upload MP4 or Link URL</p>
+                                           </div>
+                                           <div className="bg-white/5 border border-glass-border p-6 rounded-2xl text-left hover:border-primary transition-all cursor-pointer group flex flex-col h-full" onClick={() => { setSelectedActivity('document'); setActiveCourseView('add-activity'); }}>
+                                              <div className="w-10 h-10 rounded-xl bg-blue-500 text-white flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><FileText size={18} /></div>
+                                              <h4 className="text-xs font-black text-main uppercase">Add Document</h4>
+                                              <p className="text-[10px] text-muted mt-1 uppercase font-bold flex-grow">Upload PDF, Word, or text files</p>
+                                           </div>
+                                           <div className="bg-white/5 border border-glass-border p-6 rounded-2xl text-left hover:border-primary transition-all cursor-pointer group flex flex-col h-full relative overflow-hidden" onClick={() => { setSelectedActivity('quiz'); setActiveCourseView('add-activity'); }}>
+                                              <div className="absolute top-3 right-3 px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded-full text-[8px] font-black uppercase tracking-widest">AI Powered</div>
+                                              <div className="w-10 h-10 rounded-xl bg-purple-500 text-white flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><BrainCircuit size={18} /></div>
+                                              <h4 className="text-xs font-black text-main uppercase">AI Quiz</h4>
+                                              <p className="text-[10px] text-muted mt-1 uppercase font-bold flex-grow">Auto-generate from topic content</p>
+                                           </div>
+                                           <div className="bg-white/5 border border-glass-border p-6 rounded-2xl text-left hover:border-primary transition-all cursor-pointer group flex flex-col h-full" onClick={() => { setSelectedActivity('assignment'); setActiveCourseView('add-activity'); }}>
+                                              <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><PenTool size={18} /></div>
+                                              <h4 className="text-xs font-black text-main uppercase">Assignment</h4>
+                                              <p className="text-[10px] text-muted mt-1 uppercase font-bold flex-grow">Collect files or text submissions</p>
+                                           </div>
+                                        </div>
+                                     </div>
+                                  ) : (
+                                     <div className="bg-surface border border-glass-border rounded-[32px] shadow-xl overflow-hidden min-w-0">
+                                        <div className="p-8 border-b border-glass-border flex items-center gap-4 bg-white/5">
+                           <button onClick={() => setActiveCourseView('dashboard')} className="p-2 bg-background hover:bg-white/10 rounded-xl border border-glass-border transition-all"><ChevronRight size={18} className="rotate-180" /></button>
+                           <div>
+                              <h3 className="text-xl font-black text-main uppercase italic">Adding {selectedActivity} to {courseTopics.find(t => t.id === activeTopicId)?.name}</h3>
+                              <p className="text-muted text-[10px] uppercase font-bold tracking-widest mt-1">Configure your content details below</p>
+                           </div>
+                        </div>
+                        <div className="p-10 space-y-12 pb-32">
+                           {/* General Section */}
+                           <div className="space-y-6">
+                              <h4 className="text-[12px] font-black uppercase text-main tracking-widest border-l-4 border-primary pl-4">General</h4>
+                              <div className="space-y-3">
+                                 <div className="flex items-center gap-2">
+                                    <span className="text-[9px] font-black uppercase text-muted tracking-widest">Activity Name <span className="text-red-500 text-lg leading-none">*</span></span>
+                                    <Info size={10} className="text-muted/50" />
+                                 </div>
+                                 <input 
+                                    type="text" 
+                                    value={videoActivityForm.name} 
+                                    onChange={e => setVideoActivityForm({ ...videoActivityForm, name: e.target.value })} 
+                                    className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 text-xs font-bold focus:border-primary transition-all outline-none rounded-2xl shadow-inner" 
+                                    placeholder={`Enter activity name...`} 
+                                 />
+                              </div>
+                              <div className="space-y-3">
+                                 <div className="flex items-center gap-2">
+                                    <span className="text-[9px] font-black uppercase text-muted tracking-widest">Description (optional)</span>
+                                    <Info size={10} className="text-muted/50" />
+                                 </div>
+                                 <div className="border border-glass-border rounded-[24px] bg-background/50 overflow-hidden shadow-inner focus-within:border-primary/50 transition-colors">
+                                    <div className="flex items-center gap-2 p-4 bg-surface border-b border-glass-border flex-wrap">
+                                       <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+                                          <button className="p-2 hover:bg-white/10 rounded-md transition-colors"><Type size={14} /></button>
+                                          <button className="p-2 hover:bg-white/10 rounded-md transition-colors font-serif font-black">A</button>
                                        </div>
-
-                                       <div className="space-y-4 px-2">
-                                          <h4 className="text-[12px] font-black uppercase text-main tracking-widest flex items-center gap-2"><Info size={16} className="text-primary" /> About Course</h4>
-                                          <p className="text-sm font-medium leading-relaxed text-main/80 bg-surface/60 p-8 rounded-3xl border border-glass-border shadow-sm">{createdCourse.summary || 'No summary provided.'}</p>
+                                       <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+                                          <button className="p-2 hover:bg-white/10 rounded-md transition-colors font-bold text-sm">B</button>
+                                          <button className="p-2 hover:bg-white/10 rounded-md transition-colors italic text-sm">I</button>
                                        </div>
-
-                                       <div className="space-y-4 px-2">
-                                          <h4 className="text-[12px] font-black uppercase text-main tracking-widest flex items-center gap-2"><Activity size={16} className="text-primary" /> Course Analytics Dashboard</h4>
-                                          <div className="grid grid-cols-2 gap-6">
-                                             <div className="bg-surface p-8 rounded-3xl border border-glass-border flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
-                                                <div>
-                                                   <h5 className="text-3xl font-black text-main">0</h5>
-                                                   <p className="text-[10px] font-black text-muted uppercase tracking-widest mt-2">Total Enrollments</p>
-                                                   <p className="text-[8px] text-green-500 font-bold mt-1 tracking-widest bg-green-500/10 inline-block px-2 py-0.5 rounded uppercase">vs Last Month</p>
-                                                </div>
-                                                <div className="w-16 h-16 rounded-2xl bg-purple-500/10 text-purple-500 border border-purple-500/20 flex items-center justify-center shadow-inner"><UserPlus size={28} /></div>
-                                             </div>
-                                             <div className="bg-surface p-8 rounded-3xl border border-glass-border flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
-                                                <div>
-                                                   <h5 className="text-3xl font-black text-main">0 min</h5>
-                                                   <p className="text-[10px] font-black text-muted uppercase tracking-widest mt-2">Average Time</p>
-                                                   <p className="text-[8px] text-muted font-bold mt-1 tracking-widest uppercase">Per Session</p>
-                                                </div>
-                                                <div className="w-16 h-16 rounded-2xl bg-blue-500/10 text-blue-500 border border-blue-500/20 flex items-center justify-center shadow-inner"><Activity size={28} /></div>
-                                             </div>
-                                          </div>
-                                       </div>
-                                    </div>
-
-                                    {/* Right Panel: Admin details */}
-                                    <div className="w-[300px] space-y-6 flex-shrink-0">
-                                       <div className="bg-surface border border-glass-border rounded-[32px] p-8 shadow-xl space-y-5">
-                                          <h4 className="text-[10px] font-black uppercase text-muted tracking-widest mb-6 border-b border-glass-border pb-4">Course Actions</h4>
-                                          <button className="w-full py-4 bg-background border-2 border-primary/30 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:border-primary text-primary transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow-md hover:bg-primary/5">
-                                             <UserPlus size={16} /> Enroll Users
-                                          </button>
-                                       </div>
-
-                                       <div className="bg-surface border border-glass-border rounded-[32px] p-8 shadow-xl space-y-5">
-                                          <h4 className="text-[10px] font-black uppercase text-muted tracking-widest mb-6 flex items-center gap-3 border-b border-glass-border pb-4">
-                                             <div className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)]" /> Course Features
-                                          </h4>
-                                          <div className="flex items-center justify-between text-xs font-black text-main/80 hover:text-primary cursor-pointer transition-colors bg-white/5 p-4 rounded-2xl">
-                                             <span className="flex items-center gap-3 uppercase tracking-widest"><BookOpen size={16} className="text-primary/70" /> Forum</span>
-                                             <ChevronRight size={16} />
-                                          </div>
-                                       </div>
-
-                                       <div className="bg-surface border border-glass-border rounded-[32px] p-8 shadow-xl space-y-5">
-                                          <h4 className="text-[10px] font-black uppercase text-muted tracking-widest mb-6 flex items-center gap-3 border-b border-glass-border pb-4">
-                                             <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]" /> Instructors
-                                          </h4>
-                                          <div className="flex items-center justify-between p-4 bg-background rounded-2xl border border-glass-border shadow-inner group cursor-pointer hover:border-primary transition-colors">
-                                             <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 bg-gradient-to-br from-yellow-400 to-orange-500 text-white font-black rounded-full flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">A</div>
-                                                <span className="text-[11px] font-black uppercase tracking-widest text-main">Admin User</span>
-                                             </div>
-                                             <Database size={16} className="text-muted group-hover:text-primary transition-colors" />
-                                          </div>
+                                       <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+                                          <button className="p-2 hover:bg-white/10 rounded-md transition-colors"><List size={14} /></button>
                                        </div>
                                     </div>
-                                 </>
-                              )}
+                                    <textarea 
+                                       value={videoActivityForm.description}
+                                       onChange={e => setVideoActivityForm({ ...videoActivityForm, description: e.target.value })}
+                                       className="w-full h-40 bg-transparent p-6 text-xs font-bold outline-none resize-none custom-scrollbar" 
+                                       placeholder="Enter activity description..." 
+                                    />
+                                 </div>
+                              </div>
+                              <label className="flex items-center gap-4 group cursor-pointer w-max">
+                                 <div onClick={() => setVideoActivityForm({ ...videoActivityForm, displayDescription: !videoActivityForm.displayDescription })} className={`w-5 h-5 rounded-[6px] border-2 transition-all flex items-center justify-center ${videoActivityForm.displayDescription ? 'bg-primary border-primary' : 'border-glass-border group-hover:border-primary'}`}>
+                                    {videoActivityForm.displayDescription && <Plus size={14} className="text-white rotate-45" />}
+                                 </div>
+                                 <span className="text-[10px] font-bold text-main/80 uppercase tracking-widest">Display description on course page</span>
+                              </label>
+                           </div>
 
-                              {activeCourseView === 'add-activity' && (
-                                 <div className="flex-grow bg-surface border border-glass-border rounded-[32px] shadow-xl overflow-hidden min-w-0">
-                                    <div className="p-8 border-b border-glass-border flex items-center gap-4">
-                                       <button onClick={() => setActiveCourseView('dashboard')} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all"><ChevronRight size={18} className="rotate-180" /></button>
-                                       <div>
-                                          <h3 className="text-xl font-black text-main">Adding a new {selectedActivity === 'video' ? 'Video' : 'Activity'} to Topic 1</h3>
-                                          <p className="text-muted text-[10px] uppercase font-bold tracking-widest mt-1">You are adding a new {selectedActivity === 'video' ? 'video' : 'activity'}</p>
-                                       </div>
-                                    </div>
-
-                                    <div className="p-10 space-y-12">
-                                       {/* General Section */}
-                                       <div className="space-y-6">
-                                          <h4 className="text-sm font-black text-main">General</h4>
-                                          <div className="space-y-3 flex-grow">
-                                             <div className="flex items-center gap-2">
-                                                <span className="text-[9px] font-black uppercase text-muted tracking-widest">Activity Name <span className="text-red-500 text-lg leading-none">*</span></span>
-                                             </div>
-                                             <input type="text" value={newActivityForm.name} onChange={e => setNewActivityForm({ ...newActivityForm, name: e.target.value })} className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 text-xs font-bold focus:border-primary transition-all outline-none" placeholder={`Enter activity name...`} />
-                                          </div>
-                                          <div className="space-y-3">
-                                             <label className="text-[9px] font-black uppercase text-muted tracking-widest">Description <Info size={10} className="inline" /></label>
-                                             <div className="border border-glass-border rounded-xl bg-background/50 overflow-hidden">
-                                                <div className="flex items-center gap-2 p-3 bg-surface border-b border-glass-border flex-wrap">
-                                                   <div className="flex items-center gap-1 bg-white/5 set-padding rounded p-1">
-                                                      <button className="p-1.5 hover:bg-white/10 rounded"><Type size={14} /></button>
-                                                      <button className="p-1.5 hover:bg-white/10 rounded font-serif font-black">A</button>
-                                                   </div>
-                                                   <div className="flex items-center gap-1 bg-white/5 rounded p-1">
-                                                      <button className="p-1.5 hover:bg-white/10 rounded font-bold">B</button>
-                                                      <button className="p-1.5 hover:bg-white/10 rounded italic">I</button>
-                                                   </div>
-                                                   <div className="flex items-center gap-1 bg-white/5 rounded p-1">
-                                                      <button className="p-1.5 hover:bg-white/10 rounded"><List size={14} /></button>
-                                                      <button className="p-1.5 hover:bg-white/10 rounded"><Link size={14} /></button>
-                                                      <button className="p-1.5 hover:bg-white/10 rounded"><Image size={14} /></button>
-                                                      <button className="p-1.5 hover:bg-white/10 rounded"><Video size={14} /></button>
-                                                   </div>
-                                                </div>
-                                                <textarea className="w-full h-32 bg-transparent p-6 text-xs font-bold outline-none resize-none" placeholder="This activity will explain..." />
-                                             </div>
-                                          </div>
-                                          <label className="flex items-center gap-4 group cursor-pointer w-max">
-                                             <div className="w-5 h-5 rounded border border-glass-border flex items-center justify-center group-hover:border-primary transition-all"></div>
-                                             <span className="text-[10px] font-bold text-main/80 uppercase tracking-widest">Display description on course page</span>
-                                          </label>
-                                       </div>
-
-                                       {/* Conditional Video Section */}
+                                       {/* Video Section */}
                                        {selectedActivity === 'video' && (
                                           <div className="space-y-6">
-                                             <h4 className="text-xl font-black text-main">Video</h4>
-                                             <div className="flex bg-gray-100 border border-glass-border rounded-lg w-full max-w-md overflow-hidden p-1 shadow-sm">
-                                                <button className="flex-1 px-6 py-2.5 bg-white text-main rounded-md font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow"><UploadCloud size={14} /> Upload File</button>
-                                                <button className="flex-1 px-6 py-2.5 text-muted hover:text-main rounded-md font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"><Link size={14} /> Video Link</button>
+                                             <h4 className="text-[12px] font-black uppercase text-main tracking-widest border-l-4 border-primary pl-4">Video</h4>
+                                             <div className="flex bg-background/50 border border-glass-border rounded-2xl w-full max-w-2xl overflow-hidden p-1.5 shadow-inner">
+                                                <button 
+                                                   onClick={() => setVideoActivityForm({ ...videoActivityForm, videoType: 'upload' })}
+                                                   className={`flex-1 px-6 py-3 rounded-[14px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${videoActivityForm.videoType === 'upload' ? 'bg-surface text-primary shadow-lg border border-glass-border' : 'text-muted hover:text-main'}`}
+                                                >
+                                                   <UploadCloud size={16} /> Upload File
+                                                </button>
+                                                <button 
+                                                   onClick={() => setVideoActivityForm({ ...videoActivityForm, videoType: 'link' })}
+                                                   className={`flex-1 px-6 py-3 rounded-[14px] font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${videoActivityForm.videoType === 'link' ? 'bg-surface text-primary shadow-lg border border-glass-border' : 'text-muted hover:text-main'}`}
+                                                >
+                                                   <Link size={16} /> Video Link
+                                                </button>
                                              </div>
-                                             <div>
-                                                <label className="text-[10px] font-black text-red-500 uppercase tracking-widest">* <span className="text-main">Video file:</span> <Info size={12} className="inline text-muted" /></label>
-                                                <div className="w-full h-56 mt-3 border-2 border-dashed border-glass-border bg-gray-50 rounded-xl flex flex-col items-center justify-center gap-2 hover:border-gray-400 transition-colors cursor-pointer group">
-                                                   <div className="w-12 h-12 flex items-center justify-center text-muted group-hover:text-main transition-all">
-                                                      <UploadCloud size={28} />
-                                                   </div>
-                                                   <div className="text-center">
-                                                      <span className="text-sm font-bold text-main">Drag and drop video here, or click to <span className="text-[#0ea5e9]">browse</span></span>
-                                                      <p className="text-[10px] font-medium text-muted mt-1 uppercase tracking-widest">Supports MP4, MOV, AVI • Max file size: 500MB</p>
+                                             
+                                             {videoActivityForm.videoType === 'upload' ? (
+                                                <div className="space-y-4">
+                                                   <label className="text-[10px] font-black uppercase text-main tracking-widest ml-1"><span className="text-red-500">*</span> Video file <Info size={12} className="inline text-muted/50" /></label>
+                                                   <div 
+                                                      onClick={() => activityFileInputRef.current?.click()}
+                                                      className="w-full h-64 border-2 border-dashed border-glass-border bg-background/30 rounded-[32px] flex flex-col items-center justify-center gap-4 hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer group shadow-inner relative overflow-hidden"
+                                                   >
+                                                      <input 
+                                                         type="file" 
+                                                         ref={activityFileInputRef} 
+                                                         className="hidden" 
+                                                         accept="video/*"
+                                                         onChange={(e) => handleActivityFileUpload(e, 'videoUrl')} 
+                                                      />
+                                                      {videoActivityForm.videoUrl && videoActivityForm.videoUrl.includes('uploads/') ? (
+                                                         <div className="text-center p-6">
+                                                            <div className="p-4 bg-primary/10 rounded-2xl mb-4 inline-block">
+                                                               <Video size={32} className="text-primary" />
+                                                            </div>
+                                                            <p className="text-xs font-black text-main uppercase">Video Uploaded Successfully</p>
+                                                            <p className="text-[10px] text-muted mt-1 truncate max-w-xs">{videoActivityForm.videoUrl}</p>
+                                                            <button 
+                                                               onClick={(e) => { e.stopPropagation(); setVideoActivityForm({ ...videoActivityForm, videoUrl: '' }); }}
+                                                               className="mt-4 text-[9px] font-black text-red-500 uppercase tracking-widest hover:underline"
+                                                            >
+                                                               Remove File
+                                                            </button>
+                                                         </div>
+                                                      ) : (
+                                                         <>
+                                                            <div className="p-5 bg-surface rounded-2xl shadow-xl group-hover:scale-110 transition-transform">
+                                                               <UploadCloud size={32} className="text-primary" />
+                                                            </div>
+                                                            <div className="text-center">
+                                                               <span className="text-sm font-black text-main">Drag and drop video here, or click to <span className="text-primary hover:underline">browse</span></span>
+                                                               <p className="text-[10px] font-bold text-muted mt-2 uppercase tracking-widest opacity-60">Supports MP4, MOV, AVI • Max file size: 500MB</p>
+                                                            </div>
+                                                         </>
+                                                      )}
                                                    </div>
                                                 </div>
-                                                <p className="text-red-500 text-[10px] mt-2 font-bold uppercase tracking-widest">Video url should be youtube or vimeo</p>
-                                             </div>
-                                             <div className="space-y-4 pt-4">
-                                                <label className="flex items-center gap-4 cursor-pointer w-max group">
-                                                   <div className="w-4 h-4 rounded border border-glass-border flex items-center justify-center group-hover:border-primary transition-all"></div>
-                                                   <span className="text-[11px] font-bold text-main">Check to generate a transcription for this video</span>
-                                                </label>
-                                                <label className="flex items-center gap-4 cursor-pointer w-max group">
-                                                   <div className="w-4 h-4 rounded border border-glass-border flex items-center justify-center group-hover:border-primary transition-all"></div>
-                                                   <span className="text-[11px] font-bold text-main">Check if the video is in Hindi.</span>
-                                                </label>
-                                             </div>
+                                             ) : (
+                                                <div className="space-y-4">
+                                                   <label className="text-[10px] font-black uppercase text-main tracking-widest ml-1"><span className="text-red-500">*</span> Video URL <Info size={12} className="inline text-muted/50" /></label>
+                                                   <div className="relative">
+                                                      <Globe className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" size={18} />
+                                                      <input 
+                                                         type="text" 
+                                                         value={videoActivityForm.videoUrl}
+                                                         onChange={e => setVideoActivityForm({ ...videoActivityForm, videoUrl: e.target.value })}
+                                                         className="academy-input w-full h-16 bg-background/50 border border-glass-border px-16 text-xs font-bold focus:border-primary transition-all outline-none rounded-2xl shadow-inner" 
+                                                         placeholder="Paste YouTube, Vimeo, or MP4 URL here..." 
+                                                      />
+                                                   </div>
+                                                   <p className="text-red-500 text-[9px] font-black uppercase tracking-widest ml-2 opacity-80">Note: External videos may have platform-specific restrictions.</p>
+                                                </div>
+                                             )}
                                           </div>
                                        )}
 
-                                       <div className="pt-8">
-                                          <h4 className="text-sm font-black text-main flex items-center gap-2 mb-6"><ChevronUp size={16} /> Advanced Settings</h4>
+                                       {/* Advanced Settings */}
+                                       <div className="space-y-6 pt-10 border-t border-glass-border">
+                                          <div className="flex items-center gap-3">
+                                             <ChevronUp size={20} className="text-primary" />
+                                             <h4 className="text-[12px] font-black uppercase text-main tracking-[0.2em]">Advanced Settings</h4>
+                                          </div>
+                                          
                                           <div className="space-y-4">
-                                             {/* Video Sub-section */}
-                                             <div className="p-4 bg-gray-100/60 border border-gray-200/60 rounded-xl flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-all">
-                                                <span className="text-main font-black text-[12px]">Video</span>
-                                                <ChevronRight className="text-muted" size={16} />
-                                             </div>
+                                             {/* Video Specific Settings */}
+                                             <div className="border border-glass-border rounded-[32px] overflow-hidden bg-surface shadow-xl">
+                                                <div 
+                                                   onClick={() => setActiveAdvancedSection(activeAdvancedSection === 'video' ? '' : 'video')}
+                                                   className={`p-6 flex items-center justify-between cursor-pointer transition-colors ${activeAdvancedSection === 'video' ? 'bg-primary/5' : 'hover:bg-white/5'}`}
+                                                >
+                                                   <span className="text-xs font-black uppercase tracking-widest text-main">Video Options</span>
+                                                   <ChevronDown size={18} className={`transition-transform duration-300 ${activeAdvancedSection === 'video' ? 'rotate-180' : ''}`} />
+                                                </div>
+                                                
+                                                {activeAdvancedSection === 'video' && (
+                                                   <div className="p-10 space-y-10 animate-in slide-in-from-top-4 duration-300">
+                                                      <div className="space-y-4">
+                                                         <div className="flex items-center gap-2">
+                                                            <span className="text-[10px] font-black uppercase text-main tracking-widest">Video player size</span>
+                                                            <Info size={12} className="text-muted/50" />
+                                                         </div>
+                                                         <div className="flex items-center gap-6">
+                                                            <div className="relative flex-1 max-w-[200px]">
+                                                               <input 
+                                                                  type="number" 
+                                                                  value={videoActivityForm.playerSizeWidth}
+                                                                  onChange={e => setVideoActivityForm({ ...videoActivityForm, playerSizeWidth: e.target.value })}
+                                                                  className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 pr-12 text-xs font-bold focus:border-primary transition-all outline-none rounded-xl" 
+                                                               />
+                                                               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted uppercase">px</span>
+                                                            </div>
+                                                            <X size={14} className="text-muted opacity-40" />
+                                                            <div className="relative flex-1 max-w-[200px]">
+                                                               <input 
+                                                                  type="number" 
+                                                                  value={videoActivityForm.playerSizeHeight}
+                                                                  onChange={e => setVideoActivityForm({ ...videoActivityForm, playerSizeHeight: e.target.value })}
+                                                                  className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 pr-12 text-xs font-bold focus:border-primary transition-all outline-none rounded-xl" 
+                                                               />
+                                                               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted uppercase">px</span>
+                                                            </div>
+                                                         </div>
+                                                      </div>
 
-                                             {/* Common Module Settings Collapsible Section */}
-                                             <div className="border border-gray-200/60 rounded-xl overflow-hidden shadow-sm bg-surface">
-                                                <div className="bg-gray-100/60 p-4 flex items-center justify-between cursor-pointer">
-                                                   <span className="text-main font-black text-[12px]">Common Module Settings</span>
-                                                   <ChevronUp className="text-main" size={16} />
-                                                </div>
-                                                <div className="p-8 space-y-8">
-                                                   <div className="flex items-center gap-6">
-                                                      <span className="w-32 text-[10px] font-black text-main flex items-center gap-2">Availability <Info size={12} className="text-muted" /></span>
-                                                      <select className="academy-input w-72 h-10 bg-white border border-gray-200 px-4 text-xs font-bold appearance-none outline-none rounded-lg shadow-sm">
-                                                         <option>Show on course page</option>
-                                                         <option>Hide from students</option>
-                                                      </select>
+                                                      <div className="grid grid-cols-2 gap-10">
+                                                         <div className="space-y-4">
+                                                            <div className="flex items-center gap-2">
+                                                               <span className="text-[10px] font-black uppercase text-main tracking-widest">Move forward</span>
+                                                               <Info size={12} className="text-muted/50" />
+                                                            </div>
+                                                            <CompactToggle 
+                                                               label={videoActivityForm.moveForward ? "Enabled" : "Disabled"} 
+                                                               checked={videoActivityForm.moveForward} 
+                                                               onChange={v => setVideoActivityForm({ ...videoActivityForm, moveForward: v })} 
+                                                            />
+                                                         </div>
+                                                         <div className="space-y-4">
+                                                            <div className="flex items-center gap-2">
+                                                               <span className="text-[10px] font-black uppercase text-main tracking-widest">Responsive</span>
+                                                               <Info size={12} className="text-muted/50" />
+                                                            </div>
+                                                            <CompactToggle 
+                                                               label={videoActivityForm.responsive ? "Enabled" : "Disabled"} 
+                                                               checked={videoActivityForm.responsive} 
+                                                               onChange={v => setVideoActivityForm({ ...videoActivityForm, responsive: v })} 
+                                                            />
+                                                         </div>
+                                                      </div>
+
+                                                      <div className="space-y-4">
+                                                         <div className="flex items-center gap-2">
+                                                            <span className="text-[10px] font-black uppercase text-main tracking-widest">Poster image</span>
+                                                            <Info size={12} className="text-muted/50" />
+                                                         </div>
+                                                         <input 
+                                                            type="file" 
+                                                            ref={posterImageInputRef} 
+                                                            className="hidden" 
+                                                            accept="image/*"
+                                                            onChange={(e) => handleActivityFileUpload(e, 'posterImageUrl')} 
+                                                         />
+                                                         <div 
+                                                            onClick={() => posterImageInputRef.current?.click()}
+                                                            className="w-full h-48 border-2 border-dashed border-glass-border bg-background/30 rounded-3xl flex flex-col items-center justify-center gap-3 hover:border-primary/50 transition-all cursor-pointer group shadow-inner relative overflow-hidden"
+                                                         >
+                                                            {videoActivityForm.posterImageUrl ? (
+                                                               <img src={videoActivityForm.posterImageUrl} className="w-full h-full object-cover" />
+                                                            ) : (
+                                                               <>
+                                                                  <UploadCloud size={24} className="text-muted group-hover:text-primary transition-colors" />
+                                                                  <div className="text-center">
+                                                                     <p className="text-[11px] font-black text-main uppercase tracking-widest">Drag and drop image here, or click to <span className="text-primary underline">browse</span></p>
+                                                                     <p className="text-[9px] font-bold text-muted mt-1 uppercase tracking-widest opacity-60">Supports JPG, JPEG, PNG • Max file size: 5MB</p>
+                                                                  </div>
+                                                               </>
+                                                            )}
+                                                         </div>
+                                                      </div>
+
+                                                      <div className="space-y-4">
+                                                         <div className="flex items-center gap-2">
+                                                            <span className="text-[10px] font-black uppercase text-main tracking-widest">Captions</span>
+                                                            <Info size={12} className="text-muted/50" />
+                                                         </div>
+                                                         <div className="relative">
+                                                            <ScrollText className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" size={18} />
+                                                            <input 
+                                                               type="text" 
+                                                               className="academy-input w-full h-14 bg-background/50 border border-glass-border px-16 text-xs font-bold focus:border-primary transition-all outline-none rounded-xl shadow-inner" 
+                                                               placeholder="Upload or link VTT/SRT captions file..." 
+                                                            />
+                                                         </div>
+                                                      </div>
                                                    </div>
-                                                   <div className="flex items-center gap-6">
-                                                      <span className="w-32 text-[10px] font-black text-main flex items-center gap-2">ID number <Info size={12} className="text-muted" /></span>
-                                                      <input className="academy-input w-72 h-10 bg-white border border-gray-200 px-4 text-xs font-bold outline-none rounded-lg shadow-sm placeholder:font-normal placeholder:opacity-50" placeholder="Input" />
-                                                   </div>
-                                                </div>
+                                                )}
                                              </div>
 
                                              {/* Restrict Access Section */}
-                                             <div className="border border-gray-200/60 rounded-xl overflow-hidden shadow-sm bg-surface">
-                                                <div className="bg-gray-100/60 p-4 flex items-center justify-between cursor-pointer">
-                                                   <span className="text-main font-black text-[12px]">Restrict Access</span>
-                                                   <ChevronUp className="text-main" size={16} />
+                                             <div className="border border-glass-border rounded-[32px] overflow-hidden bg-surface shadow-xl">
+                                                <div 
+                                                   onClick={() => setActiveAdvancedSection(activeAdvancedSection === 'restrictions' ? '' : 'restrictions')}
+                                                   className={`p-6 flex items-center justify-between cursor-pointer transition-colors ${activeAdvancedSection === 'restrictions' ? 'bg-primary/5' : 'hover:bg-white/5'}`}
+                                                >
+                                                   <span className="text-xs font-black uppercase tracking-widest text-main">Restrict Access</span>
+                                                   <ChevronDown size={18} className={`transition-transform duration-300 ${activeAdvancedSection === 'restrictions' ? 'rotate-180' : ''}`} />
                                                 </div>
-                                                <div className="p-8 space-y-6">
-                                                   <div className="flex items-start gap-6">
-                                                      <span className="w-32 text-[10px] font-black text-main">Access restrictions</span>
-                                                      <div className="space-y-4">
-                                                         <span className="text-xs text-main">None</span>
-                                                         <button onClick={() => setShowRestrictionModal(true)} className="block text-[#0ea5e9] text-xs font-bold hover:underline">Add restriction...</button>
+                                                
+                                                {activeAdvancedSection === 'restrictions' && (
+                                                   <div className="p-10 space-y-8 animate-in slide-in-from-top-4 duration-300">
+                                                      <div className="flex items-start gap-10">
+                                                         <span className="w-40 text-[10px] font-black uppercase text-muted tracking-widest pt-2">Access restrictions</span>
+                                                         <div className="flex-grow space-y-6">
+                                                            {videoActivityForm.restrictions.length > 0 ? (
+                                                               <div className="space-y-3">
+                                                                  {videoActivityForm.restrictions.map((r, idx) => (
+                                                                     <div key={idx} className="flex items-center justify-between p-4 bg-background border border-glass-border rounded-xl">
+                                                                        <div className="flex items-center gap-3">
+                                                                           <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                                                                              <ShieldCheck size={14} />
+                                                                           </div>
+                                                                           <span className="text-[10px] font-black text-main uppercase tracking-widest">{r.title}</span>
+                                                                        </div>
+                                                                        <button 
+                                                                           onClick={() => setVideoActivityForm({ ...videoActivityForm, restrictions: videoActivityForm.restrictions.filter((_, i) => i !== idx) })}
+                                                                           className="text-red-500 hover:text-red-600 p-2"
+                                                                        >
+                                                                           <X size={14} />
+                                                                        </button>
+                                                                     </div>
+                                                                  ))}
+                                                                  <button 
+                                                                     onClick={() => setShowRestrictionModal(true)} 
+                                                                     className="text-primary text-[10px] font-black uppercase tracking-widest hover:underline mt-2"
+                                                                  >
+                                                                     + Add another restriction
+                                                                  </button>
+                                                               </div>
+                                                            ) : (
+                                                               <div className="p-6 bg-background/50 border border-glass-border rounded-2xl border-dashed flex flex-col items-center justify-center gap-3">
+                                                                  <span className="text-xs font-bold text-muted italic">No restrictions added yet</span>
+                                                                  <button 
+                                                                     onClick={() => setShowRestrictionModal(true)} 
+                                                                     className="px-6 py-2 bg-primary/10 text-primary border border-primary/20 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary hover:text-white transition-all shadow-sm"
+                                                                  >
+                                                                     Add restriction...
+                                                                  </button>
+                                                               </div>
+                                                            )}
+                                                         </div>
                                                       </div>
                                                    </div>
-                                                </div>
+                                                )}
                                              </div>
 
                                              {/* Activity Completion Section */}
-                                             <div className="border border-gray-200/60 rounded-xl overflow-hidden shadow-sm bg-surface">
-                                                <div className="bg-gray-100/60 p-4 flex items-center justify-between cursor-pointer">
-                                                   <span className="text-main font-black text-[12px]">Activity Completion</span>
-                                                   <ChevronUp className="text-main" size={16} />
+                                             <div className="border border-glass-border rounded-[32px] overflow-hidden bg-surface shadow-xl">
+                                                <div 
+                                                   onClick={() => setActiveAdvancedSection(activeAdvancedSection === 'completion' ? '' : 'completion')}
+                                                   className={`p-6 flex items-center justify-between cursor-pointer transition-colors ${activeAdvancedSection === 'completion' ? 'bg-primary/5' : 'hover:bg-white/5'}`}
+                                                >
+                                                   <span className="text-xs font-black uppercase tracking-widest text-main">Activity Completion</span>
+                                                   <ChevronDown size={18} className={`transition-transform duration-300 ${activeAdvancedSection === 'completion' ? 'rotate-180' : ''}`} />
                                                 </div>
-                                                <div className="p-8 space-y-6">
-                                                   <div className="flex items-center gap-6">
-                                                      <span className="w-40 text-[10px] font-black text-main flex items-center gap-2">Completion tracking <Info size={12} className="text-muted" /></span>
-                                                      <select className="academy-input w-80 h-10 bg-white border border-gray-200 px-4 text-xs font-bold appearance-none outline-none rounded-lg shadow-sm">
-                                                         <option>Show activity as complete when conditions are met</option>
-                                                         <option>Students can manually mark the activity as complete</option>
-                                                      </select>
-                                                   </div>
-                                                   <div className="flex items-center gap-6">
-                                                      <span className="w-40 text-[10px] font-black text-main">Require View</span>
-                                                      <label className="flex items-center gap-4 group cursor-pointer w-max">
-                                                         <div className="w-4 h-4 bg-[#0ea5e9] text-white rounded-[4px] flex items-center justify-center"><CheckSquare size={12} className="fill-current" /></div>
-                                                         <span className="text-xs font-bold text-main">Student must view this activity to complete it</span>
-                                                      </label>
-                                                   </div>
-                                                </div>
-                                             </div>
+                                                
+                                                {activeAdvancedSection === 'completion' && (
+                                                   <div className="p-10 space-y-10 animate-in slide-in-from-top-4 duration-300">
+                                                      <div className="flex items-center gap-10">
+                                                         <div className="w-48 flex items-center gap-2">
+                                                            <span className="text-[10px] font-black uppercase text-muted tracking-widest">Completion tracking</span>
+                                                            <Info size={12} className="text-muted/50" />
+                                                         </div>
+                                                         <div className="relative flex-grow max-w-xl">
+                                                            <select 
+                                                               value={videoActivityForm.completionTracking}
+                                                               onChange={e => setVideoActivityForm({ ...videoActivityForm, completionTracking: e.target.value })}
+                                                               className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 pr-12 text-xs font-bold appearance-none focus:border-primary transition-all outline-none rounded-xl shadow-inner"
+                                                            >
+                                                               <option value="none">Do not indicate activity completion</option>
+                                                               <option value="manual">Students can manually mark the activity as completed</option>
+                                                               <option value="conditions">Show activity as complete when conditions are met</option>
+                                                            </select>
+                                                            <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={16} />
+                                                         </div>
+                                                      </div>
 
-                                             <div className="p-4 bg-gray-100/60 border border-gray-200/60 rounded-xl flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-all">
-                                                <span className="text-main font-black text-[12px]">Tags</span>
-                                                <ChevronRight className="text-muted" size={16} />
-                                             </div>
+                                                      {videoActivityForm.completionTracking === 'conditions' && (
+                                                         <div className="flex items-center gap-10 pl-10 border-l-2 border-primary/20">
+                                                            <span className="w-40 text-[10px] font-black uppercase text-muted tracking-widest">Require View</span>
+                                                            <label className="flex items-center gap-4 group cursor-pointer w-max">
+                                                               <div onClick={() => setVideoActivityForm({ ...videoActivityForm, requireView: !videoActivityForm.requireView })} className={`w-5 h-5 rounded-[6px] border-2 transition-all flex items-center justify-center ${videoActivityForm.requireView ? 'bg-primary border-primary' : 'border-glass-border group-hover:border-primary'}`}>
+                                                                  {videoActivityForm.requireView && <Plus size={14} className="text-white rotate-45" />}
+                                                               </div>
+                                                               <span className="text-xs font-black text-main/80 uppercase tracking-widest">Student must view this activity to complete it</span>
+                                                            </label>
+                                                         </div>
+                                                      )}
 
-                                             <div className="p-4 bg-gray-100/60 border border-gray-200/60 rounded-xl flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-all">
-                                                <span className="text-main font-black text-[12px]">Competencies</span>
-                                                <ChevronRight className="text-muted" size={16} />
+                                                      <div className="flex items-center gap-10">
+                                                         <div className="w-48 flex items-center gap-2">
+                                                            <span className="text-[10px] font-black uppercase text-muted tracking-widest">Course completion</span>
+                                                            <Info size={12} className="text-muted/50" />
+                                                         </div>
+                                                         <label className="flex items-center gap-4 group cursor-pointer w-max">
+                                                            <div onClick={() => setVideoActivityForm({ ...videoActivityForm, courseCompletion: !videoActivityForm.courseCompletion })} className={`w-5 h-5 rounded-[6px] border-2 transition-all flex items-center justify-center ${videoActivityForm.courseCompletion ? 'bg-primary border-primary' : 'border-glass-border group-hover:border-primary'}`}>
+                                                               {videoActivityForm.courseCompletion && <Plus size={14} className="text-white rotate-45" />}
+                                                            </div>
+                                                            <span className="text-xs font-black text-main/80 uppercase tracking-widest">Must be completed to complete course</span>
+                                                         </label>
+                                                      </div>
+
+                                                      <div className="flex items-center gap-10">
+                                                         <div className="w-48 flex items-center gap-2">
+                                                            <span className="text-[10px] font-black uppercase text-muted tracking-widest">Set completion date</span>
+                                                            <Info size={12} className="text-muted/50" />
+                                                         </div>
+                                                         <div className="flex items-center gap-6">
+                                                            <CompactToggle 
+                                                               label={videoActivityForm.completionDateEnabled ? "Enabled" : "Disabled"} 
+                                                               checked={videoActivityForm.completionDateEnabled} 
+                                                               onChange={v => setVideoActivityForm({ ...videoActivityForm, completionDateEnabled: v })} 
+                                                            />
+                                                            {videoActivityForm.completionDateEnabled && (
+                                                               <input 
+                                                                  type="datetime-local" 
+                                                                  className="academy-input bg-background/50 border border-glass-border px-6 py-3 text-xs font-black uppercase rounded-xl outline-none focus:border-primary transition-all shadow-inner" 
+                                                               />
+                                                            )}
+                                                         </div>
+                                                      </div>
+                                                   </div>
+                                                )}
                                              </div>
                                           </div>
                                        </div>
-
                                     </div>
 
-                                    <div className="p-6 bg-background border-t border-glass-border flex gap-4">
-                                       <button onClick={() => {
-                                          setActivities([...activities, { id: Date.now(), name: newActivityForm.name || (selectedActivity === 'video' ? 'New Video Activity' : 'New Activity'), type: selectedActivity, topic: 1 }]);
-                                          setNewActivityForm({ name: '', description: '' });
-                                          setActiveCourseView('dashboard');
-                                       }} className="px-8 py-3.5 bg-[#0e7490] hover:bg-[#164e63] text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Save & Enroll User</button>
-                                       <button onClick={() => {
-                                          setActivities([...activities, { id: Date.now(), name: newActivityForm.name || (selectedActivity === 'video' ? 'New Video Activity' : 'New Activity'), type: selectedActivity, topic: 1 }]);
-                                          setNewActivityForm({ name: '', description: '' });
-                                          setActiveCourseView('dashboard');
-                                       }} className="px-8 py-3.5 bg-[#0e7490] hover:bg-[#164e63] text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Save And Display</button>
-                                       <button onClick={() => setActiveCourseView('dashboard')} className="px-8 py-3.5 bg-surface hover:bg-white/5 text-muted rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Cancel</button>
+                                    <div className="fixed bottom-0 right-0 left-[384px] p-6 bg-background/80 backdrop-blur-xl border-t border-glass-border flex gap-4 z-[50] justify-end">
+                                       <button 
+                                          onClick={handleSaveActivity} 
+                                          disabled={loading || !videoActivityForm.name}
+                                          className="px-10 py-4 bg-primary text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-primary/30 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center gap-3"
+                                       >
+                                          {loading && <Loader2 size={14} className="animate-spin" />}
+                                          Save & Enroll User
+                                       </button>
+                                       <button 
+                                          onClick={handleSaveActivity}
+                                          disabled={loading || !videoActivityForm.name}
+                                          className="px-10 py-4 bg-surface border border-glass-border text-main rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg hover:bg-white/5 transition-all disabled:opacity-50"
+                                       >
+                                          Save And Display
+                                       </button>
+                                       <button onClick={() => setActiveCourseView('dashboard')} className="px-10 py-4 bg-white/5 text-muted rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:text-main transition-all">Cancel</button>
                                     </div>
                                  </div>
                               )}
 
-                           </div>
-                        </div>
-                     )}
+                            </div>
+                         </div>
+                      </div>
+                   )}
 
-                  </div>
-               )}
+                      {courseStep === 5 && (
+                         <div className="animate-in slide-in-from-bottom-5 duration-700 fade-in pb-20">
+                            <div className="flex items-center justify-between mb-8">
+                               <div className="flex gap-4 items-center">
+                                  <div className="w-12 h-12 bg-purple-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-purple-500/20">
+                                     <UserPlus size={24} />
+                                  </div>
+                                  <div>
+                                     <h3 className="text-xl font-black text-main uppercase italic">Enroll Participants</h3>
+                                     <p className="text-muted text-[10px] uppercase font-bold tracking-widest mt-1">Select users to give them access to this course</p>
+                                  </div>
+                               </div>
+                            </div>
+
+                            <div className="bg-surface border border-glass-border rounded-[32px] p-10 shadow-xl space-y-8">
+                               <div className="grid grid-cols-2 gap-6 max-h-[500px] overflow-y-auto p-4 custom-scrollbar">
+                                  {data.users.map(u => (
+                                     <div 
+                                        key={u.id} 
+                                        className={`p-6 rounded-3xl border transition-all flex items-center justify-between ${enrolledUserIds.includes(u.id) ? 'bg-primary/10 border-primary shadow-lg shadow-primary/10' : 'bg-background border-glass-border hover:border-primary/50'}`}
+                                     >
+                                        <div className="flex items-center gap-4 cursor-pointer flex-grow" onClick={() => {
+                                           if (enrolledUserIds.includes(u.id)) {
+                                              setEnrolledUserIds(enrolledUserIds.filter(id => id !== u.id));
+                                           } else {
+                                              setEnrolledUserIds([...enrolledUserIds, u.id]);
+                                           }
+                                        }}>
+                                           <div className="w-10 h-10 rounded-full bg-surface border border-glass-border flex items-center justify-center font-black text-primary">{u.fullname?.[0] || 'U'}</div>
+                                           <div>
+                                              <p className="text-xs font-black text-main uppercase tracking-widest">{u.fullname}</p>
+                                              <p className="text-[10px] text-muted font-bold">{u.email}</p>
+                                           </div>
+                                        </div>
+                                        
+                                        <div className="flex items-center gap-4">
+                                           {enrolledUserIds.includes(u.id) && (
+                                              <select 
+                                                 value={enrolledRoles[u.id] || 5} 
+                                                 onChange={(e) => setEnrolledRoles({...enrolledRoles, [u.id]: parseInt(e.target.value)})}
+                                                 className="bg-surface border border-glass-border rounded-xl px-3 py-1.5 text-[10px] uppercase font-black tracking-widest text-main outline-none focus:border-primary"
+                                              >
+                                                 <option value={5}>Student</option>
+                                                 <option value={3}>Teacher</option>
+                                                 <option value={4}>Non-editing Teacher</option>
+                                              </select>
+                                           )}
+                                           <div 
+                                              onClick={() => {
+                                                 if (enrolledUserIds.includes(u.id)) {
+                                                    setEnrolledUserIds(enrolledUserIds.filter(id => id !== u.id));
+                                                 } else {
+                                                    setEnrolledUserIds([...enrolledUserIds, u.id]);
+                                                 }
+                                              }}
+                                              className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center cursor-pointer transition-all ${enrolledUserIds.includes(u.id) ? 'bg-primary border-primary text-white' : 'border-glass-border'}`}>
+                                              {enrolledUserIds.includes(u.id) && <Check size={14} />}
+                                           </div>
+                                        </div>
+                                     </div>
+                                  ))}
+                               </div>
+
+                               <div className="flex justify-between items-center pt-8 border-t border-glass-border">
+                                  <div className="text-[10px] font-black uppercase text-muted tracking-widest">
+                                     Selected: <span className="text-primary">{enrolledUserIds.length} users</span>
+                                  </div>
+                                  <div className="flex gap-4">
+                                     <button onClick={() => setCourseStep(4)} className="px-10 py-4 rounded-xl font-black text-[11px] uppercase tracking-widest bg-background border border-glass-border text-muted hover:text-main">Back</button>
+                                     <button onClick={() => setCourseStep(6)} className="px-10 py-4 rounded-xl font-black text-[11px] uppercase tracking-widest bg-primary text-white shadow-xl shadow-primary/30 hover:scale-105">Next: Review & Publish</button>
+                                  </div>
+                               </div>
+                            </div>
+                         </div>
+                      )}
+
+                      {courseStep === 6 && (
+                         <div className="animate-in slide-in-from-bottom-5 duration-700 fade-in pb-20">
+                            <div className="bg-surface border border-glass-border rounded-[32px] overflow-hidden shadow-2xl">
+                               <div className="h-64 bg-primary relative">
+                                  {courseForm.imageurl ? <img src={courseForm.imageurl} className="w-full h-full object-cover opacity-60" /> : null}
+                                  <div className="absolute inset-0 bg-gradient-to-t from-surface to-transparent" />
+                                  <div className="absolute bottom-10 left-10">
+                                     <span className="bg-white/20 backdrop-blur-md text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] mb-4 inline-block border border-white/10">Final Review</span>
+                                     <h2 className="text-4xl font-black text-white italic tracking-tight">{courseForm.fullname}</h2>
+                                  </div>
+                               </div>
+
+                               <div className="p-10 space-y-10">
+                                  <div className="grid grid-cols-3 gap-8">
+                                     <div className="bg-background/50 p-6 rounded-3xl border border-glass-border">
+                                        <p className="text-[10px] font-black uppercase text-muted tracking-widest mb-2">Structure</p>
+                                        <p className="text-lg font-black text-main">{courseTopics.length} Topics</p>
+                                     </div>
+                                     <div className="bg-background/50 p-6 rounded-3xl border border-glass-border">
+                                        <p className="text-[10px] font-black uppercase text-muted tracking-widest mb-2">Content</p>
+                                        <p className="text-lg font-black text-main">{courseTopics.reduce((acc, t) => acc + t.activities.length, 0)} Activities</p>
+                                     </div>
+                                     <div className="bg-background/50 p-6 rounded-3xl border border-glass-border">
+                                        <p className="text-[10px] font-black uppercase text-muted tracking-widest mb-2">Participants</p>
+                                        <p className="text-lg font-black text-main">{enrolledUserIds.length} Enrolled</p>
+                                     </div>
+                                  </div>
+
+                                  <div className="flex justify-end gap-6 pt-10 border-t border-glass-border">
+                                     <button onClick={() => setCourseStep(5)} className="px-12 py-4 rounded-xl font-black text-[11px] uppercase tracking-widest bg-background border border-glass-border text-muted hover:text-main">Back to Enrollment</button>
+                                     <button onClick={handlePublishCourse} disabled={loading} className="px-12 py-4 rounded-xl font-black text-[11px] uppercase tracking-widest bg-primary text-white shadow-2xl shadow-primary/40 hover:scale-105 active:scale-95 flex items-center gap-4">
+                                        {loading ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+                                        Publish Course to Moodle
+                                     </button>
+                                  </div>
+                               </div>
+                            </div>
+                         </div>
+                      )}
+
+                   </div>
+                )}
 
                {subTab === 'Categories' && (
                   <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
@@ -1384,7 +1803,17 @@ export default function MasterAdminConsole() {
                            { title: 'User profile', desc: 'Control access based on fields within the student\'s profile.' },
                            { title: 'Restriction set', desc: 'Add a set of nested restrictions to apply complex logic.' },
                         ].map(res => (
-                           <div key={res.title} onClick={() => { setShowRestrictionModal(false); alert('Restriction configured.'); }} className="flex gap-6 p-4 hover:bg-sky-50 cursor-pointer rounded-2xl transition-all items-center border border-transparent hover:border-sky-100">
+                           <div 
+                              key={res.title} 
+                              onClick={() => { 
+                                 setVideoActivityForm({ 
+                                    ...videoActivityForm, 
+                                    restrictions: [...videoActivityForm.restrictions, { title: res.title, desc: res.desc }] 
+                                 });
+                                 setShowRestrictionModal(false); 
+                              }} 
+                              className="flex gap-6 p-4 hover:bg-sky-50 cursor-pointer rounded-2xl transition-all items-center border border-transparent hover:border-sky-100"
+                           >
                               <div className="w-1/3 text-right">
                                  <span className="text-[#0ea5e9] text-sm tracking-wide font-medium">{res.title}</span>
                               </div>

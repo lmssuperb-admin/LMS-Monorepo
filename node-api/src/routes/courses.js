@@ -23,6 +23,13 @@ router.post('/categories', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.post('/:id/activities', async (req, res) => {
+  try {
+    const activity = await moodleService.createActivity({ ...req.body, courseid: req.params.id });
+    res.json(activity);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const content = await moodleService.getCourseContents(req.params.id);
