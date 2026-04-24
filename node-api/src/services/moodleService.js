@@ -120,6 +120,18 @@ class MoodleService {
     });
   }
 
+  async createCategory(c) {
+    return this.request('core_course_create_categories', {
+      categories: [{
+        name: c.name,
+        parent: parseInt(c.parent) || 0,
+        idnumber: c.idnumber || '',
+        description: c.description || '',
+        descriptionformat: 1 // HTML
+      }]
+    });
+  }
+
   // --- 🔐 PERMISSIONS (With Local Fallback Cache for System Roles) ---
   getLocalAssignments() {
     const fs = require('fs');

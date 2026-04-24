@@ -16,6 +16,13 @@ router.get('/categories', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.post('/categories', async (req, res) => {
+  try {
+    const cats = await moodleService.createCategory(req.body);
+    res.json(cats[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const content = await moodleService.getCourseContents(req.params.id);

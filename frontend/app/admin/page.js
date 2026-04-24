@@ -38,6 +38,7 @@ export default function MasterAdminConsole() {
    const [roleForm, setRoleForm] = useState({ userid: '', roleid: '', contextlevel: 'system', instanceid: 0 });
 
    const [courseForm, setCourseForm] = useState({ fullname: '', categoryid: '', summary: '', imageurl: '' });
+   const [categoryForm, setCategoryForm] = useState({ name: '', parent: '0', idnumber: '', description: '' });
    const [courseStep, setCourseStep] = useState(2);
    const [createdCourse, setCreatedCourse] = useState(null);
    const [showActivityModal, setShowActivityModal] = useState(false);
@@ -185,6 +186,25 @@ export default function MasterAdminConsole() {
          setCourseStep(4); // Success Course Overview view
       } catch (err) {
          alert("Failed to create course: " + err.message);
+      }
+      setLoading(false);
+   };
+
+   const handleCreateCategory = async () => {
+      setLoading(true);
+      try {
+         const res = await fetch('http://localhost:4000/api/courses/categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(categoryForm)
+         }).then(r => r.json());
+
+         if (res.error) throw new Error(res.error);
+         alert('Category Created Successfully!');
+         setCategoryForm({ name: '', parent: '0', idnumber: '', description: '' });
+         fetchTabData();
+      } catch (err) {
+         alert("Failed to create category: " + err.message);
       }
       setLoading(false);
    };
@@ -1064,6 +1084,132 @@ export default function MasterAdminConsole() {
                         </div>
                      )}
 
+                  </div>
+               )}
+
+               {subTab === 'Categories' && (
+                  <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
+                     <div className="bg-surface border border-glass-border rounded-3xl p-10 shadow-xl space-y-8">
+                        <div className="flex items-center justify-between border-b border-glass-border pb-6">
+                           <div>
+                              <h3 className="text-2xl font-black text-main italic uppercase tracking-tight">Add A Category</h3>
+                              <p className="text-muted text-[10px] uppercase tracking-widest font-bold mt-1">Create a new organizational category for your courses.</p>
+                           </div>
+                           <div className="p-3 bg-primary/10 rounded-2xl text-primary border border-primary/10">
+                              <Tag size={24} />
+                           </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                           <div className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                 <Info size={14} className="text-primary" />
+                                 <span className="text-[9px] font-black uppercase text-muted tracking-widest">Parent Category</span>
+                              </div>
+                              <div className="relative">
+                                 <select 
+                                    value={categoryForm.parent} 
+                                    onChange={e => setCategoryForm({ ...categoryForm, parent: e.target.value })}
+                                    className="academy-input w-full h-14 bg-background/50 border border-glass-border px-6 pr-12 text-xs font-bold appearance-none focus:border-primary transition-all outline-none rounded-2xl"
+                                 >
+                                    <option value="0">Default</option>
+                                    {data.categories.map(c => (
+                                       <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                 </select>
+                                 <ChevronDown className="absolute right-6 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={16} />
+                              </div>
+                           </div>
+
+                           <CompactInput 
+                              label="Category Name" 
+                              req 
+                              value={categoryForm.name} 
+                              onChange={v => setCategoryForm({ ...categoryForm, name: v })} 
+                           />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                           <CompactInput 
+                              label="Category ID Number" 
+                              value={categoryForm.idnumber} 
+                              onChange={v => setCategoryForm({ ...categoryForm, idnumber: v })} 
+                              icon={<Info size={14} className="text-primary" />}
+                           />
+                        </div>
+
+                        <div className="space-y-4">
+                           <label className="text-[9px] font-black uppercase text-muted tracking-widest flex items-center gap-2">Description</label>
+                           <div className="border border-glass-border rounded-[24px] bg-background/50 overflow-hidden shadow-inner">
+                              <div className="flex items-center gap-2 p-4 bg-surface border-b border-glass-border flex-wrap">
+                                 <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+                                    <button className="p-2 hover:bg-white/10 rounded-md transition-colors"><Type size={14} /></button>
+                                    <button className="p-2 hover:bg-white/10 rounded-md transition-colors font-serif font-black">A</button>
+                                 </div>
+                                 <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+                                    <button className="p-2 hover:bg-white/10 rounded-md transition-colors font-bold">B</button>
+                                    <button className="p-2 hover:bg-white/10 rounded-md transition-colors italic">I</button>
+                                 </div>
+                                 <div className="flex items-center gap-1 bg-white/5 rounded-lg p-1">
+                                    <button className="p-2 hover:bg-white/10 rounded-md transition-colors"><List size={14} /></button>
+                                    <button className="p-2 hover:bg-white/10 rounded-md transition-colors"><Link size={14} /></button>
+                                    <button className="p-2 hover:bg-white/10 rounded-md transition-colors"><Image size={14} /></button>
+                                    <button className="p-2 hover:bg-white/10 rounded-md transition-colors"><Video size={14} /></button>
+                                 </div>
+                              </div>
+                              <textarea 
+                                 value={categoryForm.description}
+                                 onChange={e => setCategoryForm({ ...categoryForm, description: e.target.value })}
+                                 className="w-full h-48 bg-transparent p-8 text-xs font-bold outline-none resize-none custom-scrollbar" 
+                                 placeholder="Provide a description for this category..." 
+                              />
+                           </div>
+                        </div>
+
+                        <div className="pt-8 border-t border-glass-border flex justify-end">
+                           <button 
+                              onClick={handleCreateCategory}
+                              disabled={loading || !categoryForm.name}
+                              className="px-12 py-5 bg-primary text-white rounded-3xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl shadow-primary/30 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center gap-3"
+                           >
+                              {loading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} 
+                              Create Category
+                           </button>
+                        </div>
+                     </div>
+
+                     <div className="bg-surface border border-glass-border rounded-3xl overflow-hidden shadow-xl">
+                        <div className="p-8 border-b border-glass-border bg-white/5">
+                           <h4 className="text-sm font-black italic uppercase tracking-wider">Existing Categories</h4>
+                        </div>
+                        <table className="w-full text-left border-collapse text-[10px]">
+                           <thead>
+                              <tr className="border-b border-glass-border bg-white/5 uppercase text-[8px] font-black tracking-widest text-primary/60">
+                                 <th className="p-6">Category Name</th>
+                                 <th className="p-6">ID Number</th>
+                                 <th className="p-6">Course Count</th>
+                              </tr>
+                           </thead>
+                           <tbody className="divide-y divide-glass-border font-bold">
+                              {data.categories?.map(c => (
+                                 <tr key={c.id} className="hover:bg-white/5 transition-colors">
+                                    <td className="p-6">
+                                       <span className="text-main uppercase tracking-tighter">{c.name}</span>
+                                    </td>
+                                    <td className="p-6 text-muted uppercase">
+                                       {c.idnumber || '—'}
+                                    </td>
+                                    <td className="p-6">
+                                       <span className="px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full text-[8px] uppercase">{c.coursecount || 0} Courses</span>
+                                    </td>
+                                 </tr>
+                              ))}
+                              {data.categories?.length === 0 && (
+                                 <tr><td colSpan="3" className="p-10 text-center text-muted uppercase text-[8px] tracking-widest">No categories found</td></tr>
+                              )}
+                           </tbody>
+                        </table>
+                     </div>
                   </div>
                )}
             </div>
