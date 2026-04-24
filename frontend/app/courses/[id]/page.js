@@ -10,7 +10,9 @@ import {
   Brain, 
   MessageSquare,
   ChevronDown,
-  Loader2
+  Loader2,
+  BookMarked,
+  Sparkles
 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 
@@ -59,7 +61,7 @@ export default function CoursePlayer() {
          </div>
          
          <div className="flex-grow overflow-y-auto custom-scrollbar p-6 space-y-6">
-            {courseContent.map((section, sidx) => (
+            {Array.isArray(courseContent) ? courseContent.map((section, sidx) => (
               <div key={section.id || sidx} className="space-y-3">
                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)] ml-2">{section.name || 'Intro'}</h3>
                  <div className="space-y-1">
@@ -86,7 +88,11 @@ export default function CoursePlayer() {
                     ))}
                  </div>
               </div>
-            ))}
+            )) : (
+              <div className="text-center p-6 bg-red-500/10 text-red-500 font-bold rounded-xl text-[10px] uppercase tracking-widest border border-red-500/20">
+                 Failed to load curriculum: {courseContent?.error || 'Unknown API Error'}
+              </div>
+            )}
          </div>
       </div>
 

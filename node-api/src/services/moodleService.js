@@ -207,6 +207,7 @@ class MoodleService {
   }
 
   async getCourses() { return this.request('core_course_get_courses'); }
+  async getCourseContents(courseid) { return this.request('core_course_get_contents', { courseid }); }
   async getCategories() { return this.request('core_course_get_categories'); }
   async getRoles() { return this.request('core_role_get_all_roles'); }
 }
