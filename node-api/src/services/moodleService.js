@@ -290,6 +290,28 @@ class MoodleService {
   async getCourseContents(courseid) { return this.request('core_course_get_contents', { courseid }); }
   async getCategories() { return this.request('core_course_get_categories'); }
   async getRoles() { return this.request('core_role_get_all_roles'); }
+  async getCalendarEvents() {
+    // Fetch events for the current year
+    const now = Math.floor(Date.now() / 1000);
+    const start = now - (31 * 24 * 60 * 60); // 1 month ago
+    const end = now + (365 * 24 * 60 * 60); // 1 year ahead
+    
+    return this.request('core_calendar_get_calendar_events', {
+      events: {
+        eventids: [],
+        courseids: [],
+        groupids: [],
+        categoryids: []
+      },
+      options: {
+        userevents: 1,
+        siteevents: 1,
+        timestart: start,
+        timeend: end
+      }
+    });
+  }
 }
 
-module.exports = new MoodleService();
+const moodleService = new MoodleService();
+module.exports = moodleService;

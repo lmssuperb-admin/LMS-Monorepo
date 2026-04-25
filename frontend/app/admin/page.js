@@ -160,15 +160,26 @@ export default function MasterAdminConsole() {
       try {
          // 🏠 Dashboard Data Fetching (Real Data aggregation)
          if (mainTab === 'dashboard') {
-            const [usersRes, coursesRes] = await Promise.all([
+            const [usersRes, coursesRes, eventsRes] = await Promise.all([
                fetch(`http://localhost:4000/api/users`, { signal }).then(r => r.json()),
-               fetch(`http://localhost:4000/api/courses`, { signal }).then(r => r.json())
+               fetch(`http://localhost:4000/api/courses`, { signal }).then(r => r.json()),
+               fetch(`http://localhost:4000/api/system/calendar`, { signal }).then(r => r.json())
             ]);
             
             setData(prev => ({
                ...prev,
                users: usersRes?.users || [],
-               courses: Array.isArray(coursesRes) ? coursesRes : (coursesRes.courses || [])
+               courses: Array.isArray(coursesRes) ? coursesRes : (coursesRes.courses || []),
+               events: Array.isArray(eventsRes) ? eventsRes.map(e => ({
+                  id: e.id,
+                  day: new Date(e.timestart * 1000).getDate(),
+                  month: new Date(e.timestart * 1000).getMonth(),
+                  year: new Date(e.timestart * 1000).getFullYear(),
+                  time: new Date(e.timestart * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+                  title: e.name,
+                  location: e.location || 'Online',
+                  type: e.eventtype
+               })) : []
             }));
          }
 
@@ -444,7 +455,7 @@ export default function MasterAdminConsole() {
    };
 
    const menuItems = {
-      dashboard: { icon: <LayoutDashboard size={18} />, subs: ['Overview'] },
+      dashboard: { icon: <LayoutDashboard size={18} />, subs: ['Overview', 'Events Calendar'] },
       users: { icon: <Users size={18} />, subs: ['Browse users', 'Add user'] },
       courses: { icon: <BookOpen size={18} />, subs: ['Manage courses', 'Categories', 'Add course'] },
       permissions: { icon: <ShieldCheck size={18} />, subs: ['Define roles', 'Assign system roles'] },
@@ -581,16 +592,21 @@ export default function MasterAdminConsole() {
                               ))}
                               {Array.from({ length: 30 }).map((_, i) => {
                                  const day = i + 1;
-                                 const isSelected = day === 25;
-                                 const hasEvents = [1, 2, 8, 9, 15, 16, 22, 23, 29, 30].includes(day);
+                                 const isToday = day === new Date().getDate();
+                                 const dayEvents = data.events.filter(e => e.day === day && e.month === 3); // April is index 3
+                                 const hasEvents = dayEvents.length > 0;
+                                 
                                  return (
-                                    <div key={i} className="relative group flex justify-center">
+                                    <div key={i} className="relative group flex justify-center" 
+                                       onMouseEnter={() => hasEvents && setSelectedEventDay(day)}
+                                       onMouseLeave={() => setSelectedEventDay(null)}
+                                    >
                                        <button 
-                                          className={`w-8 h-8 rounded-xl text-[10px] font-black transition-all relative z-10 ${isSelected ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'text-main hover:bg-white/5'}`}
-                                          onClick={() => hasEvents && setSelectedEventDay(day === selectedEventDay ? null : day)}
+                                          className={`w-8 h-8 rounded-xl text-[10px] font-black transition-all relative z-10 ${isToday ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'text-main hover:bg-white/5'}`}
+                                          onClick={() => { setSubTab('Events Calendar'); setSelectedEventDay(null); }}
                                        >
                                           {day}
-                                          {hasEvents && !isSelected && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />}
+                                          {hasEvents && !isToday && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />}
                                        </button>
                                        {selectedEventDay === day && (
                                           <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 w-64 bg-background border border-glass-border shadow-2xl rounded-2xl z-[100] p-5 animate-in slide-in-from-bottom-2 duration-300">
@@ -604,16 +620,16 @@ export default function MasterAdminConsole() {
                                                 <div className="flex items-center justify-between text-[8px] font-black uppercase text-muted border-b border-white/5 pb-2">
                                                    <span>Timing</span>
                                                    <span>Name</span>
-                                                   <span>Type</span>
+                                                   <span>Location</span>
                                                 </div>
-                                                {data.events.filter(e => e.date === '2026-04-22' || day === 22).map(ev => (
+                                                {dayEvents.map(ev => (
                                                    <div key={ev.id} className="flex items-center justify-between group/ev">
                                                       <div className="flex items-center gap-3">
                                                          <div className="w-2 h-2 rounded-full border border-primary bg-background shadow-[0_0_8px_rgba(var(--primary),0.8)]" />
                                                          <span className="text-[9px] font-bold text-main">{ev.time}</span>
                                                       </div>
-                                                      <span className="text-[9px] font-black uppercase truncate max-w-[80px]">{ev.name}</span>
-                                                      <span className="text-[8px] font-black uppercase text-primary/80">{ev.status}</span>
+                                                      <span className="text-[9px] font-black uppercase truncate max-w-[80px]">{ev.title}</span>
+                                                      <span className="text-[8px] font-black uppercase text-primary/80">{ev.location}</span>
                                                    </div>
                                                 ))}
                                              </div>
@@ -713,6 +729,28 @@ export default function MasterAdminConsole() {
                               <button className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all"><ChevronRight size={14} /></button>
                            </div>
                         </div>
+                     </div>
+                  </div>
+               )}
+
+               {subTab === 'Events Calendar' && (
+                  <div className="space-y-8 animate-in slide-in-from-right-4 duration-500">
+                     <div className="academy-card p-10 min-h-[600px] flex flex-col items-center justify-center text-center">
+                        <Calendar size={64} className="text-primary/20 mb-8" />
+                        <h2 className="text-2xl font-black text-main uppercase italic mb-4">Advanced Events Calendar</h2>
+                        <p className="text-muted text-sm max-w-lg mb-10 leading-relaxed font-medium italic">You are entering the master scheduling engine. Here you can manage all global syncs, course webinars, and student milestones.</p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl">
+                           <div className="p-8 bg-white/5 border border-glass-border rounded-[32px] space-y-4">
+                              <StatItem label="Total Events" value={data.events.length} />
+                           </div>
+                           <div className="p-8 bg-white/5 border border-glass-border rounded-[32px] space-y-4">
+                              <StatItem label="Upcoming" value={2} color="text-primary" />
+                           </div>
+                           <div className="p-8 bg-white/5 border border-glass-border rounded-[32px] space-y-4">
+                              <StatItem label="Completed" value={1} color="text-muted" />
+                           </div>
+                        </div>
+                        <button className="mt-12 bg-primary text-white px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-primary/20">Create New Event</button>
                      </div>
                   </div>
                )}

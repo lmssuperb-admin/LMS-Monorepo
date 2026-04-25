@@ -47,4 +47,11 @@ router.get('/info', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.get('/calendar', async (req, res) => {
+  try {
+    const data = await moodleService.getCalendarEvents();
+    res.json(data?.events || []);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
