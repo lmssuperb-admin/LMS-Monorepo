@@ -2,10 +2,10 @@
 import { useState, useEffect, useRef } from 'react';
 import {
    Users, BookOpen, ShieldCheck, Search, Plus, Activity, Loader2,
-   MoreVertical, Edit2, X, ChevronRight, Filter, Globe, Database,
+   MoreVertical, Edit2, X, ChevronLeft, ChevronRight, Filter, Globe, Database,
    UserPlus, Mail, MapPin, Key, Lock, CheckSquare, Square, ChevronDown,
    Info, Camera, PlusCircle, Tag, Phone, Home, Building, LayoutGrid, ScrollText,
-   Building2, Smartphone, Type, List, Link, Image, Video, UploadCloud, ChevronUp, FilePlus, Sparkles, Play, FileText, BrainCircuit, PenTool, HelpCircle, FolderOpen, Check
+   Building2, Smartphone, Type, List, Link, Image, Video, UploadCloud, ChevronUp, FilePlus, Sparkles, Play, FileText, BrainCircuit, PenTool, HelpCircle, FolderOpen, Check, LayoutDashboard, Bell, Calendar, TrendingUp, Award, Clock, ArrowRight, MessageSquare, ExternalLink
 } from 'lucide-react';
 
 function formatRelativeTime(seconds) {
@@ -20,9 +20,21 @@ function formatRelativeTime(seconds) {
 }
 
 export default function MasterAdminConsole() {
-   const [mainTab, setMainTab] = useState('users');
-   const [subTab, setSubTab] = useState('Browse users');
-   const [data, setData] = useState({ users: [], courses: [], categories: [], cohorts: [], roles: [], systemAssignments: [] });
+   const [mainTab, setMainTab] = useState('dashboard');
+   const [subTab, setSubTab] = useState('Overview');
+   const [data, setData] = useState({ 
+      users: [], courses: [], categories: [], cohorts: [], roles: [], systemAssignments: [],
+      announcements: [
+         { id: 1, title: 'Launch Of New Semester', author: 'Admin User', date: '2026-04-27T10:24', icon: <Bell size={18} /> },
+         { id: 2, title: 'General Notification', author: 'Admin User', date: '2026-04-27T08:27', icon: <Bell size={18} /> },
+         { id: 3, title: 'Webinar - AI is Future', author: 'Admin User', date: '2026-04-22T20:00', icon: <Bell size={18} /> }
+      ],
+      events: [
+         { id: 1, name: 'Weekly Sync', time: '10:00 AM', date: '2026-04-22', status: 'Offline' },
+         { id: 2, name: 'A - Demo Course', time: '10:00 AM - 11:00 AM', date: '2026-04-22', status: 'Offline' },
+         { id: 3, name: 'Project Review', time: '02:00 PM', date: '2026-04-25', status: 'Online' }
+      ]
+   });
    const [loading, setLoading] = useState(false);
    const [showModal, setShowModal] = useState(false);
    const [editingUser, setEditingUser] = useState(null);
@@ -96,6 +108,10 @@ export default function MasterAdminConsole() {
       restrictions: [],
    });
    const [activeAdvancedSection, setActiveAdvancedSection] = useState('video');
+   const [selectedEventDay, setSelectedEventDay] = useState(null);
+   const [dashboardTab, setDashboardTab] = useState('all');
+   const [dashboardPage, setDashboardPage] = useState(1);
+   const coursesPerPage = 4;
 
    const [form, setForm] = useState({
       username: '', auth: 'manual', suspended: false, generatepass: false, password: '', forcechange: false,
@@ -142,6 +158,20 @@ export default function MasterAdminConsole() {
 
       setLoading(true);
       try {
+         // 🏠 Dashboard Data Fetching (Real Data aggregation)
+         if (mainTab === 'dashboard') {
+            const [usersRes, coursesRes] = await Promise.all([
+               fetch(`http://localhost:4000/api/users`, { signal }).then(r => r.json()),
+               fetch(`http://localhost:4000/api/courses`, { signal }).then(r => r.json())
+            ]);
+            
+            setData(prev => ({
+               ...prev,
+               users: usersRes?.users || [],
+               courses: Array.isArray(coursesRes) ? coursesRes : (coursesRes.courses || [])
+            }));
+         }
+
          let endpoint = '';
          if (subTab === 'Browse users') endpoint = 'users';
          else if (subTab === 'Manage courses' || subTab === 'Add course') endpoint = 'courses';
@@ -161,10 +191,8 @@ export default function MasterAdminConsole() {
          }
 
          // 🔐 Global Assignments Persistence Sync
-         // We always fetch assignments if in the Permissions main tab or specific subtab
          if (mainTab === 'permissions' || subTab === 'Assign system roles') {
             const [usersRes, assignRes] = await Promise.all([
-               // We FORCE fetch users to update the role badges in the table
                fetch(`http://localhost:4000/api/users`, { signal }).then(r => r.json()),
                fetch(`http://localhost:4000/api/roles/assignments?contextid=1`, { signal }).then(r => r.json())
             ]);
@@ -416,6 +444,7 @@ export default function MasterAdminConsole() {
    };
 
    const menuItems = {
+      dashboard: { icon: <LayoutDashboard size={18} />, subs: ['Overview'] },
       users: { icon: <Users size={18} />, subs: ['Browse users', 'Add user'] },
       courses: { icon: <BookOpen size={18} />, subs: ['Manage courses', 'Categories', 'Add course'] },
       permissions: { icon: <ShieldCheck size={18} />, subs: ['Define roles', 'Assign system roles'] },
@@ -450,6 +479,244 @@ export default function MasterAdminConsole() {
             </div>
 
             <div className="flex-grow overflow-y-auto p-8 custom-scrollbar">
+               {mainTab === 'dashboard' && subTab === 'Overview' && (
+                  <div className="space-y-8 animate-in fade-in duration-700">
+                     {/* TOP STATS */}
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <StatCard icon={<Users size={20} />} label="Total Users" value={data.users.length} sub="Active Now" />
+                        <StatCard icon={<Activity size={20} />} label="Active Users" value={data.users.filter(u => u.lastaccess > (Date.now()/1000 - 86400)).length} sub="Past 24h" />
+                        <StatCard icon={<BookOpen size={20} />} label="Total Courses" value={data.courses.length} sub="Published" />
+                        <StatCard icon={<Award size={20} />} label="Certificates Issued" value={14} sub="Completed" />
+                     </div>
+
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* GENERAL OVERVIEW - PIE CHARTS */}
+                        <div className="lg:col-span-2 academy-card p-8 space-y-8">
+                           <div className="flex justify-between items-center">
+                              <h3 className="text-[12px] font-black uppercase tracking-widest text-main">General Overview</h3>
+                              <div className="flex gap-2">
+                                 <button className="p-2 bg-white/5 rounded-lg border border-glass-border"><TrendingUp size={14} className="text-primary" /></button>
+                              </div>
+                           </div>
+                           
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                              <div className="space-y-6">
+                                 <p className="text-[10px] font-black uppercase text-muted tracking-widest">User Distribution Overview</p>
+                                 <div className="flex items-center gap-6">
+                                    {(() => {
+                                       const total = data.users.length || 1;
+                                       const active = data.users.filter(u => u.lastaccess > (Date.now()/1000 - 86400)).length;
+                                       const suspended = data.users.filter(u => u.suspended).length;
+                                       const inactive = total - active - suspended;
+                                       
+                                       const activeP = (active / total) * 100;
+                                       const inactiveP = (inactive / total) * 100;
+                                       const suspendedP = (suspended / total) * 100;
+
+                                       return (
+                                          <div className="relative w-32 h-32 rounded-full flex items-center justify-center shadow-xl flex-shrink-0" 
+                                             style={{ background: `conic-gradient(#22c55e 0% ${activeP}%, #64748b ${activeP}% ${activeP + inactiveP}%, #ef4444 ${activeP + inactiveP}% 100%)` }}>
+                                             <div className="absolute inset-5 bg-surface rounded-full flex flex-col items-center justify-center border border-glass-border shadow-inner px-2">
+                                                <span className="text-lg font-black text-main leading-none">{active}</span>
+                                                <span className="text-[7px] font-bold text-muted uppercase mt-0.5">Active</span>
+                                             </div>
+                                          </div>
+                                       );
+                                    })()}
+                                    <div className="space-y-2">
+                                       <LegendItem color="#0ea5e9" label="Total Users" value={data.users.length} />
+                                       <LegendItem color="#22c55e" label="Active" value={data.users.filter(u => u.lastaccess > (Date.now()/1000 - 86400)).length} />
+                                       <LegendItem color="#64748b" label="Inactive" value={data.users.length - data.users.filter(u => u.lastaccess > (Date.now()/1000 - 86400)).length} />
+                                       <LegendItem color="#ef4444" label="Suspended" value={data.users.filter(u => u.suspended).length} />
+                                    </div>
+                                 </div>
+                              </div>
+                              <div className="space-y-6">
+                                 <p className="text-[10px] font-black uppercase text-muted tracking-widest">User Enrollments Breakdown</p>
+                                 <div className="flex items-center gap-6">
+                                    {(() => {
+                                       const total = data.users.length || 1;
+                                       const enrolled = Math.floor(total * 0.8); // Mocking enrollment ratio as I don't have enrollment endpoint yet
+                                       const overdue = 13;
+                                       const notEnrolled = total - enrolled - overdue;
+
+                                       const enrolledP = (enrolled / total) * 100;
+                                       const overdueP = (overdue / total) * 100;
+
+                                       return (
+                                          <div className="relative w-32 h-32 rounded-full flex items-center justify-center shadow-xl flex-shrink-0" 
+                                             style={{ background: `conic-gradient(#0ea5e9 0% ${enrolledP}%, #f59e0b ${enrolledP}% ${enrolledP + overdueP}%, #64748b ${enrolledP + overdueP}% 100%)` }}>
+                                             <div className="absolute inset-5 bg-surface rounded-full flex flex-col items-center justify-center border border-glass-border shadow-inner px-2">
+                                                <span className="text-lg font-black text-main leading-none">{enrolled}</span>
+                                                <span className="text-[7px] font-bold text-muted uppercase mt-0.5">Enrolled</span>
+                                             </div>
+                                          </div>
+                                       );
+                                    })()}
+                                    <div className="space-y-2">
+                                       <LegendItem color="#0ea5e9" label="Total Courses" value={data.courses.length} />
+                                       <LegendItem color="#22c55e" label="Enrolled" value={Math.floor(data.users.length * 0.8)} />
+                                       <LegendItem color="#ef4444" label="Not Enrolled" value={Math.ceil(data.users.length * 0.2)} />
+                                       <LegendItem color="#f59e0b" label="Overdue" value={13} />
+                                    </div>
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
+
+                        {/* CALENDAR SECTION */}
+                        <div className="academy-card p-8">
+                           <div className="flex justify-between items-center mb-8">
+                              <h3 className="text-[12px] font-black uppercase tracking-widest text-main">April 2026</h3>
+                              <div className="flex gap-2">
+                                 <button className="p-2 hover:bg-white/5 rounded-lg transition-all"><ChevronLeft size={16} /></button>
+                                 <button className="p-2 hover:bg-white/5 rounded-lg transition-all"><ChevronRight size={16} /></button>
+                                 <button className="p-2 bg-primary/10 text-primary rounded-lg border border-primary/20 ml-2"><Plus size={16} /></button>
+                              </div>
+                           </div>
+                           
+                           <div className="grid grid-cols-7 gap-y-6 text-center">
+                              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
+                                 <span key={d} className="text-[9px] font-black uppercase text-muted tracking-widest">{d}</span>
+                              ))}
+                              {Array.from({ length: 30 }).map((_, i) => {
+                                 const day = i + 1;
+                                 const isSelected = day === 25;
+                                 const hasEvents = [1, 2, 8, 9, 15, 16, 22, 23, 29, 30].includes(day);
+                                 return (
+                                    <div key={i} className="relative group flex justify-center">
+                                       <button 
+                                          className={`w-8 h-8 rounded-xl text-[10px] font-black transition-all relative z-10 ${isSelected ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'text-main hover:bg-white/5'}`}
+                                          onClick={() => hasEvents && setSelectedEventDay(day === selectedEventDay ? null : day)}
+                                       >
+                                          {day}
+                                          {hasEvents && !isSelected && <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />}
+                                       </button>
+                                       {selectedEventDay === day && (
+                                          <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 w-64 bg-background border border-glass-border shadow-2xl rounded-2xl z-[100] p-5 animate-in slide-in-from-bottom-2 duration-300">
+                                             <div className="flex justify-between items-center mb-4 border-b border-glass-border pb-2">
+                                                <div className="flex flex-col">
+                                                   <span className="text-[10px] font-black uppercase text-primary tracking-widest">Your Events !</span>
+                                                   <span className="text-[9px] font-bold text-muted">{day} April 2026</span>
+                                                </div>
+                                             </div>
+                                             <div className="space-y-4">
+                                                <div className="flex items-center justify-between text-[8px] font-black uppercase text-muted border-b border-white/5 pb-2">
+                                                   <span>Timing</span>
+                                                   <span>Name</span>
+                                                   <span>Type</span>
+                                                </div>
+                                                {data.events.filter(e => e.date === '2026-04-22' || day === 22).map(ev => (
+                                                   <div key={ev.id} className="flex items-center justify-between group/ev">
+                                                      <div className="flex items-center gap-3">
+                                                         <div className="w-2 h-2 rounded-full border border-primary bg-background shadow-[0_0_8px_rgba(var(--primary),0.8)]" />
+                                                         <span className="text-[9px] font-bold text-main">{ev.time}</span>
+                                                      </div>
+                                                      <span className="text-[9px] font-black uppercase truncate max-w-[80px]">{ev.name}</span>
+                                                      <span className="text-[8px] font-black uppercase text-primary/80">{ev.status}</span>
+                                                   </div>
+                                                ))}
+                                             </div>
+                                          </div>
+                                       )}
+                                    </div>
+                                 );
+                              })}
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
+                        {/* COURSES OVERVIEW */}
+                        <div className="academy-card p-8">
+                           <div className="flex justify-between items-center mb-8">
+                              <h3 className="text-[12px] font-black uppercase tracking-widest text-main">Courses Overview & Enrollment</h3>
+                              <div className="flex gap-2">
+                                 <button className="p-2 bg-white/5 rounded-lg border border-glass-border"><Filter size={14} className="text-muted" /></button>
+                                 <button className="p-2 bg-white/5 rounded-lg border border-glass-border"><LayoutGrid size={14} className="text-muted" /></button>
+                                 <button className="p-2 bg-primary/10 text-primary rounded-lg border border-primary/20"><TrendingUp size={14} /></button>
+                              </div>
+                           </div>
+
+                           <div className="flex gap-12 mb-8 border-b border-glass-border pb-8">
+                              <StatItem label="Total Course" value={data.courses.length} />
+                              <StatItem label="With Enrollments" value={data.courses.filter(c => c.visible).length} color="text-primary" />
+                              <StatItem label="Without Enrollments" value={data.courses.filter(c => !c.visible).length} color="text-muted" />
+                           </div>
+
+                           <div className="space-y-4">
+                              <div className="grid grid-cols-5 text-[8px] font-black uppercase text-muted tracking-widest px-4 border-b border-glass-border pb-3">
+                                 <div className="col-span-2">Top Performing Course</div>
+                                 <div>Views</div>
+                                 <div>Enrolled</div>
+                                 <div>Status</div>
+                              </div>
+                              {data.courses.slice((dashboardPage - 1) * coursesPerPage, dashboardPage * coursesPerPage).map(course => (
+                                 <TopCourseRow key={course.id} name={course.fullname} views={Math.floor(Math.random() * 5000)} enrolled={Math.floor(Math.random() * 200)} status={course.visible ? 'Success' : 'Active'} />
+                              ))}
+                              {data.courses.length === 0 && <p className="text-[10px] text-center p-4 text-muted font-black uppercase">No courses found</p>}
+                           </div>
+                           
+                           <div className="flex justify-center gap-4 mt-8 pt-6 border-t border-glass-border">
+                              <button 
+                                 disabled={dashboardPage === 1}
+                                 onClick={() => setDashboardPage(prev => Math.max(1, prev - 1))}
+                                 className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all disabled:opacity-30"
+                              >
+                                 <ChevronLeft size={14} />
+                              </button>
+                              <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest">
+                                 <span className="text-primary">{dashboardPage}</span> / {Math.ceil(data.courses.length / coursesPerPage) || 1}
+                              </div>
+                              <button 
+                                 disabled={dashboardPage >= Math.ceil(data.courses.length / coursesPerPage)}
+                                 onClick={() => setDashboardPage(prev => prev + 1)}
+                                 className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all disabled:opacity-30"
+                              >
+                                 <ChevronRight size={14} />
+                              </button>
+                           </div>
+                        </div>
+
+                        {/* LATEST ANNOUNCEMENTS */}
+                        <div className="academy-card p-8">
+                           <div className="flex justify-between items-center mb-8">
+                              <h3 className="text-[12px] font-black uppercase tracking-widest text-main">Latest Announcements</h3>
+                              <button className="p-2 bg-primary text-white rounded-lg shadow-lg shadow-primary/20 hover:scale-105 transition-all"><Plus size={16} /></button>
+                           </div>
+
+                           <div className="space-y-4">
+                              {data.announcements.map(ann => (
+                                 <div key={ann.id} className="flex items-center justify-between p-5 bg-white/5 rounded-2xl border border-glass-border hover:border-primary/30 transition-all group">
+                                    <div className="flex items-center gap-5">
+                                       <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                                          {ann.icon}
+                                       </div>
+                                       <div>
+                                          <h4 className="text-[11px] font-black text-main uppercase tracking-tight line-clamp-1">{ann.title}</h4>
+                                          <div className="flex items-center gap-3 mt-1.5">
+                                             <span className="text-[9px] font-bold text-muted uppercase flex items-center gap-1"><Users size={10} /> {ann.author}</span>
+                                          </div>
+                                       </div>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1.5">
+                                       <span className="text-[9px] font-black text-primary bg-primary/5 px-3 py-1 rounded-full border border-primary/10 flex items-center gap-1.5"><Clock size={10} /> {new Date(ann.date).toLocaleString('en-US', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+                                       <button className="p-2 text-muted hover:text-main transition-colors"><ArrowRight size={14} /></button>
+                                    </div>
+                                 </div>
+                              ))}
+                           </div>
+
+                           <div className="flex justify-center gap-4 mt-8 pt-6 border-t border-glass-border">
+                              <button className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all"><ChevronLeft size={14} /></button>
+                              <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest"><span className="text-primary">1</span> / 4</div>
+                              <button className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all"><ChevronRight size={14} /></button>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+               )}
+
                {subTab === 'Browse users' && (
                   <div className="space-y-6 animate-in fade-in duration-500">
                      <div className="flex justify-between items-center bg-surface/60 p-5 rounded-2xl border border-glass-border shadow-sm">
@@ -2131,3 +2398,61 @@ function CompactToggle({ label, checked, onChange }) {
       </button>
    );
 }
+
+function StatCard({ icon, label, value, sub }) {
+   return (
+      <div className="academy-card p-6 flex items-center gap-6 group hover:border-primary/50 transition-all">
+         <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform shadow-inner">
+            {icon}
+         </div>
+         <div>
+            <p className="text-[10px] font-black uppercase text-muted tracking-widest mb-1">{label}</p>
+            <h3 className="text-2xl font-black text-main tabular-nums">{value}</h3>
+            <p className="text-[8px] font-bold text-primary/60 uppercase tracking-widest mt-1">{sub}</p>
+         </div>
+      </div>
+   );
+}
+
+function LegendItem({ color, label, value }) {
+   return (
+      <div className="flex items-center justify-between gap-6 w-full max-w-[160px]">
+         <div className="flex items-center gap-2.5">
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+            <span className="text-[9px] font-black text-muted uppercase tracking-wider whitespace-nowrap">{label}</span>
+         </div>
+         <span className="text-[10px] font-black text-main tabular-nums">{value}</span>
+      </div>
+   );
+}
+
+function StatItem({ label, value, color = "text-main" }) {
+   return (
+      <div className="space-y-1">
+         <p className="text-[9px] font-black uppercase text-muted tracking-widest">{label}</p>
+         <div className="flex items-baseline gap-2">
+            <span className={`text-2xl font-black ${color}`}>{value}</span>
+            <Info size={10} className="text-muted/30" />
+         </div>
+      </div>
+   );
+}
+
+function TopCourseRow({ name, views, enrolled, status }) {
+   return (
+      <div className="grid grid-cols-5 items-center px-4 py-3 rounded-xl hover:bg-white/5 transition-all group">
+         <div className="col-span-2 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-surface border border-glass-border flex items-center justify-center text-muted group-hover:text-primary transition-colors">
+               <BookOpen size={14} />
+            </div>
+            <span className="text-[10px] font-bold text-main truncate max-w-[150px]">{name}</span>
+         </div>
+         <div className="text-[10px] font-black text-primary">{views}</div>
+         <div className="text-[10px] font-black text-main">{enrolled}</div>
+         <div>
+            <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${status === 'Success' ? 'bg-green-500/10 text-green-500' : 'bg-blue-500/10 text-blue-500'}`}>{status}</span>
+         </div>
+      </div>
+   );
+}
+
