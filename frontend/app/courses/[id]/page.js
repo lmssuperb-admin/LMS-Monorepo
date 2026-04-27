@@ -102,39 +102,83 @@ export default function CoursePlayer() {
          {/* Player Area */}
          <div className="flex-grow bg-black flex items-center justify-center p-10">
             {activeModule ? (
-               <div className="w-full h-full max-w-5xl rounded-[40px] overflow-hidden shadow-3xl bg-[var(--surface)] border border-glass-border flex flex-col">
-                  {activeModule.modname === 'resource' ? (
-                    <div className="flex-grow flex flex-col items-center justify-center text-center p-20">
-                       <div className="w-24 h-24 rounded-3xl bg-blue-500/10 flex items-center justify-center text-blue-400 mb-8 animate-float">
-                          <FileText size={48} />
-                       </div>
-                       <h2 className="text-3xl font-black text-[var(--text-main)] mb-4">{activeModule.name}</h2>
-                       <p className="text-[var(--text-muted)] max-w-lg mb-10 leading-relaxed">This PDF resource is being decrypted from the Moodle vault. You can read it here or download it to your local machine.</p>
-                       <button className="bg-primary text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-primary/20">
-                          View Presentation
-                       </button>
+               <div className="w-full h-full max-w-5xl rounded-[40px] overflow-hidden shadow-3xl bg-[var(--surface)] border border-glass-border flex flex-col relative">
+                  {/* Header Overlay (Hidden on hover for video) */}
+                  <div className="absolute top-0 left-0 right-0 p-8 bg-gradient-to-b from-black/60 to-transparent z-10 pointer-events-none opacity-100 group-hover:opacity-0 transition-opacity duration-500">
+                     <h2 className="text-xl font-black text-white italic tracking-tight">{activeModule.name}</h2>
+                     <p className="text-white/60 text-[9px] font-black uppercase tracking-[0.3em] mt-1">Module: {activeModule.modname}</p>
+                  </div>
+
+                  {activeModule.modname === 'resource' || (activeModule.modname === 'url' && activeModule.contents?.[0]?.fileurl?.endsWith('.pdf')) ? (
+                    <div className="w-full h-full bg-[#333]">
+                       <iframe 
+                          src={activeModule.contents?.[0]?.fileurl ? `${activeModule.contents[0].fileurl}${activeModule.contents[0].fileurl.includes('?') ? '&' : '?'}token=${localStorage.getItem('moodle_token') || '6219356d21396a8682054c7d0ccf825e'}` : activeModule.url} 
+                          className="w-full h-full border-none"
+                          title={activeModule.name}
+                       />
+                    </div>
+                  ) : activeModule.modname === 'url' || activeModule.modname === 'video' ? (
+                    <div className="w-full h-full bg-black relative group">
+                       {(() => {
+                          const url = activeModule.contents?.[0]?.fileurl || activeModule.url || '';
+                          if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                             const videoId = url.split('v=')[1]?.split('&')[0] || url.split('/').pop();
+                             return (
+                                <iframe 
+                                   src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`}
+                                   className="w-full h-full"
+                                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                   allowFullScreen
+                                />
+                             );
+                          } else if (url.includes('vimeo.com')) {
+                             const videoId = url.split('/').pop();
+                             return (
+                                <iframe 
+                                   src={`https://player.vimeo.com/video/${videoId}?autoplay=1`}
+                                   className="w-full h-full"
+                                   allow="autoplay; fullscreen; picture-in-picture"
+                                   allowFullScreen
+                                />
+                             );
+                          } else {
+                             return (
+                                <video 
+                                   controls 
+                                   autoPlay
+                                   className="w-full h-full object-contain"
+                                   src={url + (url.includes('?') ? '&' : '?') + 'token=6219356d21396a8682054c7d0ccf825e'}
+                                >
+                                   Your browser does not support the video tag.
+                                </video>
+                             );
+                          }
+                       })()}
                     </div>
                   ) : (
-                    <div className="relative w-full h-full group">
-                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex flex-col justify-end p-12 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <h2 className="text-2xl font-black text-white">{activeModule.name}</h2>
-                          <p className="text-white/60 text-xs font-bold uppercase tracking-widest">Video Lecture 04: Industrial Systems</p>
+                    <div className="flex-grow flex flex-col items-center justify-center text-center p-20">
+                       <div className="w-24 h-24 rounded-3xl bg-primary/10 flex items-center justify-center text-primary mb-8 animate-float">
+                          <Brain size={48} />
                        </div>
-                       <video className="w-full h-full object-cover" poster="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=2070">
-                          {/* Real video logic would go here */}
-                       </video>
-                       <div className="absolute inset-0 flex items-center justify-center">
-                          <button className="w-20 h-20 rounded-full bg-primary text-white flex items-center justify-center shadow-2xl hover:scale-110 transition-transform">
-                             <Play size={32} fill="white" />
-                          </button>
-                       </div>
+                       <h2 className="text-3xl font-black text-[var(--text-main)] mb-4">{activeModule.name}</h2>
+                       <p className="text-[var(--text-muted)] max-w-lg mb-10 leading-relaxed italic">
+                          "This module contains interactive content. Click below to launch the activity in a safe environment."
+                       </p>
+                       <a 
+                          href={activeModule.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="bg-primary text-white px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-primary/30 hover:scale-105 active:scale-95 transition-all"
+                       >
+                          Launch Activity
+                       </a>
                     </div>
                   )}
                </div>
             ) : (
-               <div className="text-center text-[var(--text-muted)]">
-                  <BookMarked size={48} className="mx-auto mb-4 opacity-20" />
-                  <p className="text-xs font-black uppercase tracking-widest">Select a module to begin learning</p>
+               <div className="text-center text-[var(--text-muted)] animate-pulse">
+                  <BookMarked size={64} className="mx-auto mb-6 opacity-20" />
+                  <p className="text-[10px] font-black uppercase tracking-[0.4em]">Initialize Curriculum Stream...</p>
                </div>
             )}
          </div>

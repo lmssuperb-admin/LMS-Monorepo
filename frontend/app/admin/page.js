@@ -60,7 +60,8 @@ export default function MasterAdminConsole() {
       { id: 2, name: 'Topic 2', activities: [] },
       { id: 3, name: 'Topic 3', activities: [] },
    ]);
-   const [enrolledUserIds, setEnrolledUserIds] = useState([]);
+    const [enrolledUserIds, setEnrolledUserIds] = useState([]);
+    const [selectedCourseIds, setSelectedCourseIds] = useState([]);
    const [enrolledRoles, setEnrolledRoles] = useState({});
    const [activeTopicId, setActiveTopicId] = useState(1);
    const [createdCourse, setCreatedCourse] = useState(null);
@@ -120,9 +121,9 @@ export default function MasterAdminConsole() {
       profileimageurl: '', roleid: ''
    });
 
-   useEffect(() => {
-      fetchTabData();
-   }, [mainTab, subTab]);
+    useEffect(() => {
+       fetchTabData();
+    }, [mainTab, subTab, courseStep]);
 
    useEffect(() => {
       setCurrentPage(1);
@@ -168,8 +169,8 @@ export default function MasterAdminConsole() {
 
             setData(prev => ({
                ...prev,
-               users: usersRes?.users || [],
-               courses: Array.isArray(coursesRes) ? coursesRes : (coursesRes.courses || []),
+               users: Array.isArray(usersRes) ? usersRes : (usersRes?.users || []),
+               courses: Array.isArray(coursesRes) ? coursesRes : (coursesRes?.courses || []),
                events: Array.isArray(eventsRes) ? eventsRes.map(e => ({
                   id: e.id,
                   day: new Date(e.timestart * 1000).getDate(),
@@ -187,6 +188,19 @@ export default function MasterAdminConsole() {
          if (subTab === 'Browse users') endpoint = 'users';
          else if (subTab === 'Manage courses' || subTab === 'Add course') endpoint = 'courses';
          else if (subTab === 'Define roles' || subTab === 'Assign system roles') endpoint = 'roles';
+
+         // 🔄 Ensure users and their roles are fetched for enrollment step in Add Course
+         if (subTab === 'Add course') {
+            const [userRes, assignRes] = await Promise.all([
+               fetch(`http://localhost:4000/api/users`, { signal }).then(r => r.json()),
+               fetch(`http://localhost:4000/api/roles/assignments`, { signal }).then(r => r.json())
+            ]);
+            setData(prev => ({ 
+               ...prev, 
+               users: Array.isArray(userRes) ? userRes : (userRes?.users || []),
+               systemAssignments: Array.isArray(assignRes) ? assignRes : []
+            }));
+         }
 
          // 🔄 Main Endpoint Fetch
          if (endpoint) {
@@ -210,8 +224,8 @@ export default function MasterAdminConsole() {
 
             setData(prev => ({
                ...prev,
-               users: usersRes?.users || prev.users,
-               systemAssignments: Array.isArray(assignRes) ? assignRes : prev.systemAssignments
+               users: Array.isArray(usersRes) ? usersRes : (usersRes?.users || []),
+               systemAssignments: Array.isArray(assignRes) ? assignRes : []
             }));
          }
       } catch (err) {
@@ -378,6 +392,34 @@ export default function MasterAdminConsole() {
          fetchTabData();
       } catch (err) {
          alert("Deletion failed: " + err.message);
+      }
+      setLoading(false);
+   };
+
+   const handleBulkDeleteCourses = async () => {
+      if (selectedCourseIds.length === 0) return;
+      if (!confirm(`Are you sure you want to delete ${selectedCourseIds.length} courses?`)) return;
+      
+      setLoading(true);
+      try {
+         // Delete courses sequentially or in parallel
+         const deletePromises = selectedCourseIds.map(id => 
+            fetch(`http://localhost:4000/api/courses/${id}`, { method: 'DELETE' }).then(r => r.json())
+         );
+         
+         const results = await Promise.all(deletePromises);
+         const errors = results.filter(r => r.error);
+         
+         if (errors.length > 0) {
+            alert(`Deleted with some errors: ${errors.map(e => e.error).join(', ')}`);
+         } else {
+            alert(`Successfully deleted ${selectedCourseIds.length} courses!`);
+         }
+         
+         setSelectedCourseIds([]);
+         fetchTabData();
+      } catch (err) {
+         alert("Bulk deletion failed: " + err.message);
       }
       setLoading(false);
    };
@@ -1166,9 +1208,19 @@ export default function MasterAdminConsole() {
                {subTab === 'Manage courses' && (
                   <div className="space-y-8 animate-in fade-in duration-500 pb-20">
                      <div className="flex justify-between items-center bg-surface/60 p-6 rounded-3xl border border-glass-border shadow-sm">
-                        <div>
-                           <h3 className="text-xl font-black italic uppercase tracking-tight text-main">Manage Courses</h3>
-                           <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1">View, edit, and organize all available courses</p>
+                        <div className="flex items-center gap-6">
+                           <div>
+                              <h3 className="text-xl font-black italic uppercase tracking-tight text-main">Manage Courses</h3>
+                              <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1">View, edit, and organize all available courses</p>
+                           </div>
+                           {selectedCourseIds.length > 0 && (
+                              <button 
+                                 onClick={handleBulkDeleteCourses}
+                                 className="flex items-center gap-2 px-6 py-3 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all animate-in zoom-in-95"
+                              >
+                                 <X size={14} /> Delete Selected ({selectedCourseIds.length})
+                              </button>
+                           )}
                         </div>
                         <button onClick={() => setSubTab('Add course')} className="bg-primary text-white px-8 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md hover:shadow-lg transition-all flex items-center gap-3">
                            <Plus size={16} /> Create New Course
@@ -1179,6 +1231,17 @@ export default function MasterAdminConsole() {
                         <table className="w-full text-left border-collapse">
                            <thead>
                               <tr className="border-b border-glass-border bg-white/5 uppercase text-[9px] font-black tracking-[0.2em] text-primary/60">
+                                 <th className="p-6 w-12">
+                                    <div 
+                                       onClick={() => {
+                                          if (selectedCourseIds.length === data.courses.length) setSelectedCourseIds([]);
+                                          else setSelectedCourseIds(data.courses.map(c => c.id));
+                                       }}
+                                       className={`w-5 h-5 rounded-[6px] border-2 flex items-center justify-center cursor-pointer transition-all ${selectedCourseIds.length === data.courses.length && data.courses.length > 0 ? 'bg-primary border-primary text-white' : 'border-glass-border'}`}
+                                    >
+                                       {selectedCourseIds.length === data.courses.length && data.courses.length > 0 && <Check size={12} />}
+                                    </div>
+                                 </th>
                                  <th className="p-6">Course Name</th>
                                  <th className="p-6">Shortname</th>
                                  <th className="p-6">Category</th>
@@ -1187,7 +1250,18 @@ export default function MasterAdminConsole() {
                            </thead>
                            <tbody className="divide-y divide-glass-border text-xs font-bold">
                               {data.courses?.map(c => (
-                                 <tr key={c.id} className="hover:bg-white/5 transition-colors group">
+                                 <tr key={c.id} className={`hover:bg-white/5 transition-colors group ${selectedCourseIds.includes(c.id) ? 'bg-primary/5' : ''}`}>
+                                    <td className="p-6">
+                                       <div 
+                                          onClick={() => {
+                                             if (selectedCourseIds.includes(c.id)) setSelectedCourseIds(selectedCourseIds.filter(id => id !== c.id));
+                                             else setSelectedCourseIds([...selectedCourseIds, c.id]);
+                                          }}
+                                          className={`w-5 h-5 rounded-[6px] border-2 flex items-center justify-center cursor-pointer transition-all ${selectedCourseIds.includes(c.id) ? 'bg-primary border-primary text-white' : 'border-glass-border group-hover:border-primary/50'}`}
+                                       >
+                                          {selectedCourseIds.includes(c.id) && <Check size={12} />}
+                                       </div>
+                                    </td>
                                     <td className="p-6">
                                        <div className="flex items-center gap-4">
                                           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary overflow-hidden">
@@ -1214,7 +1288,7 @@ export default function MasterAdminConsole() {
                                  </tr>
                               ))}
                               {(!data.courses || data.courses.length === 0) && (
-                                 <tr><td colSpan="4" className="p-20 text-center text-muted uppercase text-[10px] tracking-[0.3em]">No courses found in database</td></tr>
+                                 <tr><td colSpan="5" className="p-20 text-center text-muted uppercase text-[10px] tracking-[0.3em]">No courses found in database</td></tr>
                               )}
                            </tbody>
                         </table>
@@ -1985,6 +2059,22 @@ export default function MasterAdminConsole() {
                            </div>
 
                            <div className="bg-surface border border-glass-border rounded-[32px] p-10 shadow-xl space-y-8">
+                              <div className="flex justify-between items-center gap-6">
+                                 <div className="relative flex-grow">
+                                    <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" size={16} />
+                                    <input 
+                                       type="text" 
+                                       placeholder="Search users to enroll..." 
+                                       className="academy-input w-full pl-14 h-14 bg-background/50 border border-glass-border rounded-2xl text-xs font-bold focus:border-primary transition-all outline-none"
+                                       onChange={(e) => setSearchQuery(e.target.value)}
+                                       value={searchQuery}
+                                    />
+                                 </div>
+                                 <div className="text-[10px] font-black uppercase text-muted tracking-widest bg-background/50 px-6 py-4 rounded-2xl border border-glass-border whitespace-nowrap">
+                                    Total Users: <span className="text-primary">{data.users.length}</span>
+                                 </div>
+                              </div>
+
                               <div className="space-y-4">
                                  <div className="flex items-center gap-2">
                                     <span className="text-[10px] font-black uppercase text-main tracking-widest">Quick Select Groups</span>
@@ -2004,11 +2094,14 @@ export default function MasterAdminConsole() {
                                                 return roleId === group.id;
                                              });
                                              const ids = usersInGroup.map(u => u.id);
-                                             setEnrolledUserIds([...new Set([...enrolledUserIds, ...ids])]);
+                                             const newEnrolledIds = [...new Set([...enrolledUserIds, ...ids])];
+                                             setEnrolledUserIds(newEnrolledIds);
+                                             
                                              const newRoles = { ...enrolledRoles };
                                              ids.forEach(id => { newRoles[id] = group.id; });
                                              setEnrolledRoles(newRoles);
-                                             alert(`Selected all ${group.name}`);
+                                             
+                                             alert(`Selected all ${group.name} and assigned ${group.name} roles`);
                                           }}
                                           className="flex items-center gap-3 px-6 py-3 bg-white/5 border border-glass-border rounded-2xl hover:border-primary transition-all group"
                                        >
@@ -2028,7 +2121,7 @@ export default function MasterAdminConsole() {
                               </div>
 
                               <div className="grid grid-cols-2 gap-6 max-h-[500px] overflow-y-auto p-4 custom-scrollbar">
-                                 {data.users.map(u => (
+                                 {data.users.filter(u => u.fullname?.toLowerCase().includes(searchQuery.toLowerCase()) || u.email?.toLowerCase().includes(searchQuery.toLowerCase())).map(u => (
                                     <div
                                        key={u.id}
                                        className={`p-6 rounded-3xl border transition-all flex items-center justify-between ${enrolledUserIds.includes(u.id) ? 'bg-primary/10 border-primary shadow-lg shadow-primary/10' : 'bg-background border-glass-border hover:border-primary/50'}`}

@@ -185,11 +185,10 @@ class MoodleService {
 
 
     // 2. Map activity type to standard Moodle modules
+    // Since we are linking external PDFs and Videos, we use the 'url' module for maximum compatibility
     let modname = a.type || 'url';
-    if (modname === 'video') {
-       modname = a.videoType === 'link' ? 'url' : 'resource';
-    } else if (modname === 'pdf') {
-       modname = 'resource';
+    if (modname === 'video' || modname === 'pdf') {
+       modname = 'url';
     }
 
     // 3. Prepare options
@@ -221,7 +220,33 @@ class MoodleService {
     });
 
     try {
-      return typeof response === 'string' ? JSON.parse(response) : response;
+      const parsed = typeof response === 'string' ? JSON.parse(response) : response;
+      
+      // Look for the newly created module ID in the state updates
+      let newCmId = null;
+      if (parsed && parsed.updates) {
+         const cmUpdate = parsed.updates.find(u => u.name === 'coursemodule' && u.action === 'create');
+         if (cmUpdate && cmUpdate.fields) {
+            newCmId = cmUpdate.fields.id;
+         }
+      }
+
+      // If we found the ID, call our custom bridge to update the name and URL!
+      if (newCmId) {
+         console.log(`✅ [ACTIVITY] Module created (CMID: ${newCmId}). Updating details via bridge...`);
+         const targetUrl = a.videoUrl || a.pdfUrl || a.url || '';
+         await axios.post(`${this.baseUrl}/lms_api.php`, {
+            action: 'update_module',
+            cmid: newCmId,
+            courseid: parseInt(a.courseid),
+            name: a.name,
+            modname: modname,
+            url: targetUrl,
+            intro: a.description || ''
+         });
+      }
+
+      return parsed;
     } catch (e) {
       return response;
     }
