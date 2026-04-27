@@ -92,8 +92,12 @@ class new_module extends external_api {
 
         // Plugin needs to support quick creation and the course format needs to support components.
         // Formats using YUI modules should not be able to quick-create because the front end cannot react to the change.
-        if (!plugin_supports('mod', $modname, FEATURE_QUICKCREATE) || !course_get_format($courseid)->supports_components()) {
-            throw new moodle_exception("Module $modname does not support quick creation");
+        // Patch: Allow all modules even if they don't support Quick Create.
+        // if (!plugin_supports('mod', $modname, FEATURE_QUICKCREATE) || !course_get_format($courseid)->supports_components()) {
+        //     throw new moodle_exception("Module $modname does not support quick creation");
+        // }
+        if (!course_get_format($courseid)->supports_components()) {
+             throw new moodle_exception("Course format does not support components");
         }
 
         $courseformat = course_get_format($courseid);

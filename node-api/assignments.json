@@ -1,21 +1,21 @@
 [
   {
-    "userid": 3,
-    "roleid": 5,
-    "contextlevel": "course"
-  },
-  {
-    "userid": 4,
-    "roleid": 5,
-    "contextlevel": "course"
-  },
-  {
     "userid": 1,
     "roleid": 5,
     "contextlevel": "course"
   },
   {
+    "userid": 3,
+    "roleid": 5,
+    "contextlevel": "course"
+  },
+  {
     "userid": 5,
+    "roleid": 5,
+    "contextlevel": "course"
+  },
+  {
+    "userid": 4,
     "roleid": 5,
     "contextlevel": "course"
   }

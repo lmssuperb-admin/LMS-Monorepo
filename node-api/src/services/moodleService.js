@@ -149,8 +149,11 @@ class MoodleService {
   }
 
   async getCourseContents(courseid) {
-    return this.request('core_course_get_contents', { courseid: parseInt(courseid) });
+    const id = parseInt(courseid);
+    if (isNaN(id)) throw new Error(`Invalid course ID: ${courseid}`);
+    return this.request('core_course_get_contents', { courseid: id });
   }
+
 
   async createActivity(a) {
     console.log(`🚀 [ACTIVITY] Creating ${a.type} for course ${a.courseid}`);
@@ -158,8 +161,11 @@ class MoodleService {
     // 1. Resolve section ID
     let sectionId = a.sectionid;
     try {
+      // Wait for a second to ensure Moodle state is consistent
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       const contents = await this.getCourseContents(a.courseid);
-      console.log(`📦 [ACTIVITY] Course ${a.courseid} has ${contents?.length || 0} sections`);
+      console.log(`📦 [ACTIVITY] Course ${a.courseid} contents retrieved. Sections: ${contents?.length || 0}`);
       
       const sectionIndex = parseInt(a.section) || 0;
       if (contents && contents[sectionIndex]) {
@@ -167,38 +173,63 @@ class MoodleService {
         console.log(`✅ [ACTIVITY] Resolved section index ${sectionIndex} to ID ${sectionId}`);
       } else if (contents && contents.length > 0) {
         sectionId = contents[0].id;
-        console.log(`⚠️ [ACTIVITY] Section index ${sectionIndex} not found, using first section (ID ${sectionId})`);
+        console.log(`⚠️ [ACTIVITY] Section index ${sectionIndex} not found, falling back to first section (ID ${sectionId})`);
+      } else {
+        throw new Error(`Course ${a.courseid} has no sections available.`);
       }
     } catch (err) {
       console.error('❌ [ACTIVITY] Failed to resolve section ID:', err.message);
+      // If we can't find a section ID, we can't create a module
+      throw new Error(`Could not find a valid section in course ${a.courseid} to add the activity to.`);
     }
 
-    // 2. Map activity type to standard Moodle modules if it's 'video'
-    let modname = a.type || 'video';
+
+    // 2. Map activity type to standard Moodle modules
+    let modname = a.type || 'url';
     if (modname === 'video') {
        modname = a.videoType === 'link' ? 'url' : 'resource';
+    } else if (modname === 'pdf') {
+       modname = 'resource';
     }
 
-    return this.request('core_course_create_module', {
+    // 3. Prepare options
+    const options = [
+      { name: 'name', value: String(a.name) },
+      { name: 'intro', value: String(a.description || '') },
+      { name: 'introformat', value: '1' },
+      { name: 'displayintro', value: a.displayDescription ? '1' : '0' }
+    ];
+
+    if (modname === 'url') {
+      options.push({ name: 'externalurl', value: String(a.videoUrl || a.url || '') });
+    } else if (modname === 'resource') {
+      // For resource, we use the URL as a fallback or in the description if we can't upload
+      // Note: Proper resource creation requires file upload, but we'll try this as a placeholder
+      options.push({ name: 'intro', value: (a.description || '') + `\n\nFile: ${a.pdfUrl || a.videoUrl || ''}` });
+    }
+
+    // Common options
+    options.push({ name: 'completion', value: String(a.completionTracking === 'manual' ? '1' : (a.completionTracking === 'conditions' ? '2' : '0')) });
+    if (a.requireView) options.push({ name: 'completionview', value: '1' });
+
+    console.log(`📡 [ACTIVITY] Calling core_courseformat_new_module for ${modname} in section ${sectionId}`);
+
+    const response = await this.request('core_courseformat_new_module', {
       modname: modname,
       courseid: parseInt(a.courseid),
-      sectionid: parseInt(sectionId) || 0,
-      visible: 1,
-      options: [
-        { name: 'name', value: a.name },
-        { name: 'intro', value: a.description || '' },
-        { name: 'introformat', value: '1' },
-        { name: 'displayintro', value: a.displayDescription ? '1' : '0' },
-        { name: 'externalurl', value: a.videoUrl || '' }, // for 'url' module
-        { name: 'width', value: a.playerSizeWidth || '800' },
-        { name: 'height', value: a.playerSizeHeight || '500' },
-        { name: 'moveforward', value: a.moveForward ? '1' : '0' },
-        { name: 'responsive', value: a.responsive ? '1' : '0' },
-        { name: 'completion', value: a.completionTracking === 'manual' ? '1' : (a.completionTracking === 'conditions' ? '2' : '0') },
-        { name: 'completionview', value: a.requireView ? '1' : '0' }
-      ]
+      targetsectionid: parseInt(sectionId)
     });
+
+    try {
+      return typeof response === 'string' ? JSON.parse(response) : response;
+    } catch (e) {
+      return response;
+    }
   }
+
+
+
+
 
   // --- 🔐 PERMISSIONS (With Local Fallback Cache for System Roles) ---
   getLocalAssignments() {
@@ -287,7 +318,7 @@ class MoodleService {
   }
 
   async getCourses() { return this.request('core_course_get_courses'); }
-  async getCourseContents(courseid) { return this.request('core_course_get_contents', { courseid }); }
+
   async getCategories() { return this.request('core_course_get_categories'); }
   async getRoles() { return this.request('core_role_get_all_roles'); }
   async getCalendarEvents() {

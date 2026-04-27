@@ -279,14 +279,24 @@ export default function MasterAdminConsole() {
          if (course.error) throw new Error(course.error);
 
          // 2. Add Activities
+         console.log(`📚 Adding ${courseTopics.reduce((acc, t) => acc + t.activities.length, 0)} activities to course ${course.id}`);
+         
          for (let i = 0; i < courseTopics.length; i++) {
             const topic = courseTopics[i];
             for (const act of topic.activities) {
-               await fetch(`http://localhost:4000/api/courses/${course.id}/activities`, {
+               console.log(`📡 Posting activity: ${act.name} to section ${i}`);
+               const actRes = await fetch(`http://localhost:4000/api/courses/${course.id}/activities`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ ...act, section: i })
-               });
+               }).then(r => r.json());
+               
+               if (actRes.error) {
+                  console.error(`❌ Failed to add activity ${act.name}:`, actRes.error);
+                  // Optional: alert user but continue? Or stop?
+               } else {
+                  console.log(`✅ Activity ${act.name} added successfully`);
+               }
             }
          }
 
