@@ -2,176 +2,224 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
-  Play, 
-  BookMarked, 
-  Sparkles, 
   Trophy, 
   Clock, 
   ChevronRight,
   Brain,
-  Search,
   CalendarDays,
-  X,
-  Send,
+  ChevronLeft,
+  Settings2,
+  Users,
+  Award,
+  GraduationCap,
+  TrendingUp,
+  Bookmark,
+  Plus,
+  Star,
+  Target,
+  ChevronRightSquare,
+  ArrowUpRight,
   Loader2
 } from 'lucide-react';
 
-export default function StudentPanel() {
+export default function StudentDashboard() {
   const router = useRouter();
-  const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showTutor, setShowTutor] = useState(false);
-  const [chatMsg, setChatMsg] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
 
   useEffect(() => {
-    fetchStudentData();
+    setTimeout(() => setLoading(false), 500);
   }, []);
 
-  const fetchStudentData = async () => {
-    try {
-      const res = await fetch('http://localhost:4000/api/courses');
-      const data = await res.json();
-      setCourses((data || []).map(c => ({
-        id: c.id,
-        name: c.fullname,
-        shortname: c.shortname,
-        progress: Math.floor(Math.random() * 100),
-        image: getCourseEmoji(c.fullname)
-      })));
-    } catch (err) { console.error(err); }
-    setLoading(false);
-  };
-
-  const getCourseEmoji = (name) => {
-     if (name.toLowerCase().includes('python')) return '🐍';
-     if (name.toLowerCase().includes('react')) return '⚛️';
-     if (name.toLowerCase().includes('ai')) return '🤖';
-     return '📚';
-  };
-
-  const handleTutorSend = () => {
-     if (!chatMsg.trim()) return;
-     setIsTyping(true);
-     setChatMsg('');
-     setTimeout(() => setIsTyping(false), 2000);
-  };
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-screen">
+      <Loader2 className="animate-spin text-primary" size={40} />
+    </div>
+  );
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto px-8 py-6 h-[calc(100vh-100px)] flex flex-col overflow-hidden relative">
-      <div className="flex items-center justify-between mb-8 flex-shrink-0">
-        <div>
-          <h1 className="text-3xl font-black text-main mb-1">My <span className="text-primary">Learning</span></h1>
-          <p className="text-xs font-bold text-muted uppercase tracking-[0.2em]">Academic Journey Overview</p>
-        </div>
+    <div className="w-full max-w-[1600px] mx-auto px-10 py-8 min-h-screen bg-[var(--background)] flex flex-col gap-8">
+      
+      {/* ── DASHBOARD HEADER ── */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-black text-[var(--text-main)]">Dashboard</h1>
+        <button className="flex items-center gap-2 px-4 py-2 bg-surface border border-glass-border rounded-xl text-xs font-bold text-[var(--text-muted)] shadow-sm hover:bg-white/5 transition-all">
+          <Settings2 size={16} />
+          Customize Dashboard
+        </button>
+      </div>
+
+      {/* ── TOP ROW: ACHIEVEMENTS & CALENDAR ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
-        <div className="relative">
-           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={16} />
-           <input 
-             type="text" 
-             placeholder="Search library..." 
-             className="academy-input w-72 h-12"
-           />
+        {/* Achievements Widget */}
+        <div className="bg-surface rounded-[32px] p-10 border border-glass-border shadow-sm flex flex-col items-center">
+          <div className="w-full flex justify-start mb-2">
+            <h2 className="text-lg font-black text-[var(--text-main)]">Achievements</h2>
+          </div>
+          
+          <div className="flex flex-col items-center mb-10">
+            <div className="w-32 h-32 rounded-full border-4 border-primary/20 p-1 mb-4">
+              <div className="w-full h-full rounded-full bg-background/50 flex items-center justify-center overflow-hidden">
+                <Users size={64} className="text-[var(--text-muted)] opacity-30" />
+              </div>
+            </div>
+            <h3 className="text-xl font-black text-[var(--text-main)] capitalize">deepak kumar</h3>
+            <button className="text-primary text-xs font-bold underline mt-1">View Profile</button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 w-full">
+            <StatTile label="Certifications" value="0" icon={<Award size={20} />} />
+            <StatTile label="Total Courses" value="1" icon={<GraduationCap size={20} />} />
+            <StatTile label="XP Points" value="0" icon={<TrendingUp size={20} />} />
+            <StatTile label="Post" value="0" icon={<Bookmark size={20} />} />
+          </div>
+        </div>
+
+        {/* Calendar Widget */}
+        <div className="bg-surface rounded-[32px] p-10 border border-glass-border shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-4">
+              <h2 className="text-lg font-black text-[var(--text-main)]">April 2026</h2>
+              <div className="flex gap-2">
+                <button className="p-1.5 bg-background rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"><ChevronLeft size={18} /></button>
+                <button className="p-1.5 bg-background rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"><ChevronRight size={18} /></button>
+              </div>
+            </div>
+            <button className="p-2 bg-background rounded-lg text-[var(--text-main)] hover:bg-white/5 transition-colors"><Plus size={20} /></button>
+          </div>
+          
+          <div className="grid grid-cols-7 text-center mb-4">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+              <span key={day} className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">{day}</span>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-y-6 text-center">
+            {Array(2).fill(0).map((_, i) => <div key={i}></div>)}
+            {Array.from({ length: 30 }, (_, i) => i + 1).map(date => (
+              <div key={date} className="flex items-center justify-center">
+                <span className={`w-10 h-10 flex items-center justify-center text-sm font-bold rounded-xl transition-all cursor-pointer
+                  ${date === 30 
+                    ? 'border-2 border-primary text-primary shadow-lg shadow-primary/10 bg-primary/5' 
+                    : 'text-[var(--text-main)] hover:bg-white/5'}`}
+                >
+                  {date}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="flex-grow flex gap-8 min-h-0 overflow-y-auto pr-2 custom-scrollbar pb-10">
-        <div className="flex-grow space-y-8 min-w-0">
-           
-           <div 
-             onClick={() => router.push('/courses/recommendations')}
-             className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-glass-border rounded-[48px] p-10 flex items-center justify-between overflow-hidden relative cursor-pointer hover:border-primary/40 transition-all group shadow-xl"
-           >
-              <div className="absolute -right-10 -bottom-10 opacity-10 group-hover:scale-110 transition-transform">
-                 <Brain size={260} />
-              </div>
-              <div className="relative z-10 max-w-xl">
-                 <span className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-[10px] mb-4">
-                    <Sparkles size={14} /> AI Recommendation
-                 </span>
-                 <h2 className="text-3xl font-black text-main mb-4 leading-tight italic uppercase">Mastering Neural Logic</h2>
-                 <p className="text-muted text-sm mb-8 leading-relaxed font-bold">Recommended based on your enrollment in "Intro to AI".</p>
-                 <button className="bg-primary text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/30 group-hover:scale-105 transition-all">
-                    Resume Path
-                 </button>
-              </div>
-           </div>
-
-           <div>
-              <h2 className="text-[10px] font-black uppercase tracking-widest text-muted mb-6 ml-4">Active Courses</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                 {courses.map(course => (
-                   <div key={course.id} onClick={() => router.push(`/courses/${course.id}`)} className="academy-card p-8 group cursor-pointer hover:scale-[1.02]">
-                      <div className="flex justify-between items-start mb-6">
-                         <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">{course.image}</div>
-                         <button className="p-3 bg-primary text-white shadow-lg rounded-xl"><Play size={16}/></button>
-                      </div>
-                      <h4 className="text-lg font-black text-main mb-1 line-clamp-1">{course.name}</h4>
-                      <p className="text-[10px] font-black text-primary uppercase mb-6">{course.shortname}</p>
-                      <div className="w-full h-1.5 bg-background rounded-full overflow-hidden">
-                         <div className="h-full bg-primary" style={{width: `${course.progress}%`}}></div>
-                      </div>
-                   </div>
-                 ))}
-              </div>
-           </div>
+      {/* ── BOTTOM ROW: LEARNING PATH & LEVEL UP ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-10">
+        
+        {/* Learning Path Widget */}
+        <div className="bg-surface rounded-[32px] border border-glass-border shadow-sm overflow-hidden flex flex-col">
+          <div className="p-8 border-b border-glass-border">
+            <h2 className="text-lg font-black text-[var(--text-main)]">Learning Path</h2>
+          </div>
+          <div className="bg-background/50 px-8 py-4 border-b border-glass-border flex items-center text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">
+            <span className="flex-1">Learning Path Name</span>
+            <span className="w-24">Start Date</span>
+            <span className="w-24">End Date</span>
+            <span className="w-24">Status</span>
+            <span className="w-16 text-right">Credits</span>
+          </div>
+          <div className="flex-grow flex items-center justify-center p-20">
+            <p className="text-sm font-bold text-[var(--text-muted)] italic">You are not enrolled into any Learning path yet.</p>
+          </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="w-96 flex-shrink-0 space-y-6">
-           <div className="academy-card p-10">
-              <div className="flex justify-between items-center mb-10">
-                 <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted">Timeline</h3>
-                 <CalendarDays size={18} className="text-primary" />
+        {/* Level Up & Leaders Widget */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-surface rounded-[32px] p-8 border border-glass-border shadow-sm flex flex-col gap-6">
+            <h2 className="text-lg font-black text-[var(--text-main)]">Level Up</h2>
+            
+            <div className="relative pt-4">
+              <div className="flex items-end gap-2 mb-4">
+                <span className="text-3xl font-black text-[var(--text-main)]">1</span>
+                <span className="text-xs font-black text-primary uppercase mb-1">0 XP</span>
               </div>
-              <div className="space-y-8">
-                 <TimelineItem title="Midterm Quiz" date="April 20" type="exam" />
-                 <TimelineItem title="Final Handover" date="May 01" type="submission" />
+              <div className="absolute top-2 right-0">
+                 <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-white shadow-lg shadow-primary/20">
+                    <Star size={24} />
+                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white text-slate-800">1</div>
+                 </div>
               </div>
-           </div>
+              <p className="text-[10px] font-black text-[var(--text-muted)] uppercase mb-2">Progress to level 2</p>
+              <div className="w-full h-2 bg-background rounded-full overflow-hidden">
+                <div className="w-[10%] h-full bg-slate-500 rounded-full"></div>
+              </div>
+              <p className="text-[10px] font-black text-green-500 uppercase mt-4 tracking-widest">120 XP needed for next level</p>
+            </div>
 
-           <div onClick={() => setShowTutor(true)} className="academy-card p-10 bg-primary/5 hover:bg-primary/10 cursor-pointer border-primary/20 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-10 opacity-10 group-hover:scale-110 transition-transform"><Brain size={120} /></div>
-              <h3 className="text-lg font-black text-main mb-2">AI Academic Assistant</h3>
-              <p className="text-xs font-bold text-muted mb-6 leading-relaxed">Ask an AI anything about your Moodle courses.</p>
-              <button className="bg-primary text-white w-full py-4 rounded-2xl text-[10px] font-black uppercase shadow-xl shadow-primary/20">Expand Tutor</button>
-           </div>
+            <div className="space-y-3">
+              <div className="bg-green-500/5 rounded-2xl p-4 flex items-center gap-4 border border-green-500/10">
+                <div className="w-10 h-10 bg-surface border border-glass-border rounded-xl flex items-center justify-center text-green-500 shadow-sm">
+                  <Trophy size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Current Rank</p>
+                  <p className="text-sm font-black text-[var(--text-main)]">#177</p>
+                </div>
+              </div>
+              <div className="bg-primary/5 rounded-2xl p-4 flex items-center gap-4 border border-primary/10">
+                <div className="w-10 h-10 bg-surface border border-glass-border rounded-xl flex items-center justify-center text-primary shadow-sm">
+                  <Star size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Next Milestone</p>
+                  <p className="text-[11px] font-bold text-[var(--text-main)] line-clamp-1">Need 120 XP to reach next...</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Top Performers */}
+          <div className="bg-surface rounded-[32px] p-8 border border-glass-border shadow-sm flex flex-col">
+            <h2 className="text-lg font-black text-[var(--text-main)] mb-6">Top Performers</h2>
+            <div className="space-y-4 flex-grow">
+              <LeaderboardItem name="Admin User" xp="45155" rank="1" />
+              <LeaderboardItem name="Student..." xp="8334" rank="2" />
+              <LeaderboardItem name="Adam..." xp="1215" rank="3" />
+            </div>
+            <button className="w-full mt-6 py-3 text-primary font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:translate-x-1 transition-all">
+              View Full Leaderboard <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
       </div>
-
-      {/* Tutor Modal */}
-      {showTutor && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-end p-6 bg-black/40 backdrop-blur-md">
-           <div className="relative w-full max-w-lg h-full max-h-[850px] academy-card flex flex-col overflow-hidden animate-in slide-in-from-right-10">
-              <div className="p-10 border-b border-glass-border flex justify-between">
-                 <h3 className="text-xl font-black">AI Tutor Hub</h3>
-                 <button onClick={() => setShowTutor(false)}><X size={24}/></button>
-              </div>
-              <div className="flex-grow p-10 overflow-y-auto space-y-6">
-                 <div className="bg-primary/10 p-5 rounded-3xl text-sm font-bold text-main rounded-tl-none">Hello! How can I help with your studies?</div>
-              </div>
-              <div className="p-10 border-t border-glass-border flex gap-4">
-                 <input className="academy-input flex-grow h-14" placeholder="Type a message..." />
-                 <button className="w-14 h-14 bg-primary text-white rounded-2xl flex items-center justify-center"><Send size={24}/></button>
-              </div>
-           </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function TimelineItem({ title, date, type }) {
+function StatTile({ label, value, icon }) {
   return (
-    <div className="flex items-center justify-between group">
-       <div className="flex items-center gap-4">
-          <div className={`w-2 h-2 rounded-full ${type === 'exam' ? 'bg-red-500' : 'bg-primary'} animate-pulse`}></div>
-          <div>
-             <h4 className="text-xs font-black text-main">{title}</h4>
-             <p className="text-[9px] font-black text-muted uppercase tracking-widest">{date}</p>
-          </div>
-       </div>
-       <ChevronRight size={14} className="text-muted group-hover:text-primary transition-colors" />
+    <div className="bg-background/40 border border-glass-border rounded-2xl p-4 flex items-center justify-between shadow-sm hover:shadow-md hover:border-primary/20 transition-all group">
+      <div>
+        <p className="text-[10px] font-black text-[var(--text-muted)] mb-1">{label}</p>
+        <p className="text-xl font-black text-[var(--text-main)]">{value}</p>
+      </div>
+      <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+        {icon}
+      </div>
+    </div>
+  );
+}
+
+function LeaderboardItem({ name, xp, rank }) {
+  return (
+    <div className="flex items-center justify-between p-4 rounded-3xl hover:bg-background transition-all cursor-pointer border border-transparent hover:border-glass-border">
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 rounded-full bg-background border-2 border-surface overflow-hidden flex items-center justify-center">
+           <Users size={24} className="text-[var(--text-muted)] opacity-30" />
+        </div>
+        <div>
+          <p className="text-sm font-black text-[var(--text-main)]">{name}</p>
+          <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Level 1 • {xp} XP</p>
+        </div>
+      </div>
+      <span className="text-xs font-black text-[var(--text-muted)] mr-2">#{rank}</span>
     </div>
   );
 }

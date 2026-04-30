@@ -46,6 +46,26 @@ export default function Navbar() {
         </div>
       </div>
 
+      {/* Navigation Links */}
+      <div className="hidden md:flex items-center gap-10 ml-12">
+        <button 
+          onClick={() => router.push('/student')} 
+          className="text-[10px] font-black uppercase tracking-[0.2em] text-main hover:text-primary transition-all relative group"
+        >
+          Home
+          <div className="absolute -bottom-1 left-0 w-0 h-0.5 bg-primary group-hover:w-full transition-all duration-300"></div>
+        </button>
+        <button 
+          onClick={() => router.push('/courses')} 
+          className="text-[10px] font-black uppercase tracking-[0.2em] text-muted hover:text-primary transition-all relative group"
+        >
+          Courses
+          <div className="absolute -bottom-1 left-0 w-0 h-0.5 bg-primary group-hover:w-full transition-all duration-300"></div>
+        </button>
+      </div>
+
+      <div className="flex-grow"></div>
+
       {/* Action Center */}
       <div className="flex items-center gap-4 sm:gap-6">
         

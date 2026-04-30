@@ -11,8 +11,7 @@ import {
   MessageSquare,
   ChevronDown,
   Loader2,
-  BookMarked,
-  Sparkles
+  BookMarked
 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 
@@ -22,7 +21,6 @@ export default function CoursePlayer() {
   const [courseContent, setCourseContent] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeModule, setActiveModule] = useState(null);
-  const [showTutor, setShowTutor] = useState(true);
 
   useEffect(() => {
     fetchCourseStructure();
@@ -109,69 +107,73 @@ export default function CoursePlayer() {
                      <p className="text-white/60 text-[9px] font-black uppercase tracking-[0.3em] mt-1">Module: {activeModule.modname}</p>
                   </div>
 
-                  {activeModule.modname === 'resource' || (activeModule.modname === 'url' && activeModule.contents?.[0]?.fileurl?.endsWith('.pdf')) ? (
-                    <div className="w-full h-full bg-[#333]">
-                       <iframe 
-                          src={activeModule.contents?.[0]?.fileurl ? `${activeModule.contents[0].fileurl}${activeModule.contents[0].fileurl.includes('?') ? '&' : '?'}token=${localStorage.getItem('moodle_token') || '6219356d21396a8682054c7d0ccf825e'}` : activeModule.url} 
-                          className="w-full h-full border-none"
-                          title={activeModule.name}
-                       />
-                    </div>
-                  ) : activeModule.modname === 'url' || activeModule.modname === 'video' ? (
-                    <div className="w-full h-full bg-black relative group">
-                       {(() => {
-                          const url = activeModule.contents?.[0]?.fileurl || activeModule.url || '';
-                          if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                             const videoId = url.split('v=')[1]?.split('&')[0] || url.split('/').pop();
-                             return (
-                                <iframe 
-                                   src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`}
-                                   className="w-full h-full"
-                                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                   allowFullScreen
-                                />
-                             );
-                          } else if (url.includes('vimeo.com')) {
-                             const videoId = url.split('/').pop();
-                             return (
-                                <iframe 
-                                   src={`https://player.vimeo.com/video/${videoId}?autoplay=1`}
-                                   className="w-full h-full"
-                                   allow="autoplay; fullscreen; picture-in-picture"
-                                   allowFullScreen
-                                />
-                             );
-                          } else {
-                             return (
-                                <video 
-                                   controls 
-                                   autoPlay
-                                   className="w-full h-full object-contain"
-                                   src={url + (url.includes('?') ? '&' : '?') + 'token=6219356d21396a8682054c7d0ccf825e'}
-                                >
-                                   Your browser does not support the video tag.
-                                </video>
-                             );
-                          }
-                       })()}
+                  {['resource', 'url', 'video', 'pdf'].includes(activeModule.modname || activeModule.type) ? (
+                    <div className="w-full h-full bg-[#333] relative group">
+                      {(() => {
+                        const fileUrl = activeModule.contents?.[0]?.fileurl;
+                        const externalUrl = activeModule.externalurl;
+                        const customPdfUrl = activeModule.pdfUrl || activeModule.pdfurl;
+                        const customVideoUrl = activeModule.videoUrl || activeModule.videourl;
+
+                        const url = customPdfUrl || customVideoUrl || fileUrl || externalUrl || activeModule.url;
+
+                        if (!url) {
+                          return (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-white/30">
+                              {['resource', 'pdf'].includes(activeModule.modname || activeModule.type) ? <FileText size={64} className="mb-6 opacity-30" /> : <Play size={64} className="mb-6 opacity-30" />}
+                              <p className="text-sm font-black uppercase tracking-[0.2em] mb-2">Content Not Found</p>
+                              <p className="text-[10px] text-center max-w-[250px]">The file or link for this module is missing. Please recreate this activity in the admin console.</p>
+                            </div>
+                          );
+                        }
+
+                        const finalUrl = (url === fileUrl)
+                          ? url + (url.includes('?') ? '&' : '?') + 'token=' + (localStorage.getItem('moodle_token') || '6219356d21396a8682054c7d0ccf825e')
+                          : url;
+
+                        // PDF
+                        if (url.toLowerCase().includes('.pdf')) {
+                          return <iframe src={finalUrl} className="w-full h-full border-none" title="PDF Viewer" />;
+                        }
+
+                        // YouTube
+                        if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                          const videoId = url.match(/v=([^\&]+)/)?.[1] || url.match(/youtu\.be\/([^?]+)/)?.[1];
+                          return <iframe src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`} className="w-full h-full border-none" allow="autoplay; encrypted-media" allowFullScreen />;
+                        }
+
+                        // Vimeo
+                        if (url.includes('vimeo.com')) {
+                          const videoId = url.split('/').pop();
+                          return <iframe src={`https://player.vimeo.com/video/${videoId}?autoplay=1`} className="w-full h-full border-none" allow="autoplay; fullscreen" allowFullScreen />;
+                        }
+
+                        // Direct video
+                        if (url.match(/\.(mp4|webm|ogg)(\?|$)/i)) {
+                          return <video controls autoPlay className="w-full h-full object-contain bg-black" src={finalUrl} />;
+                        }
+
+                        // Fallback
+                        return <iframe src={finalUrl} className="w-full h-full border-none" title="External Content" />;
+                      })()}
                     </div>
                   ) : (
                     <div className="flex-grow flex flex-col items-center justify-center text-center p-20">
-                       <div className="w-24 h-24 rounded-3xl bg-primary/10 flex items-center justify-center text-primary mb-8 animate-float">
-                          <Brain size={48} />
-                       </div>
-                       <h2 className="text-3xl font-black text-[var(--text-main)] mb-4">{activeModule.name}</h2>
-                       <p className="text-[var(--text-muted)] max-w-lg mb-10 leading-relaxed italic">
-                          "This module contains interactive content. Click below to launch the activity in a safe environment."
-                       </p>
-                       <a 
-                          href={activeModule.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="bg-primary text-white px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-primary/30 hover:scale-105 active:scale-95 transition-all"
-                       >
-                          Launch Activity
-                       </a>
+                      <div className="w-24 h-24 rounded-3xl bg-primary/10 flex items-center justify-center text-primary mb-8 animate-float">
+                        <Brain size={48} />
+                      </div>
+                      <h2 className="text-3xl font-black text-[var(--text-main)] mb-4">{activeModule.name}</h2>
+                      <p className="text-[var(--text-muted)] max-w-lg mb-10 leading-relaxed italic">
+                        "This module contains interactive content. Click below to launch the activity in a safe environment."
+                      </p>
+                      <a 
+                        href={activeModule.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="bg-primary text-white px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-primary/30 hover:scale-105 active:scale-95 transition-all"
+                      >
+                        Launch Activity
+                      </a>
                     </div>
                   )}
                </div>
@@ -210,49 +212,6 @@ export default function CoursePlayer() {
             </div>
          </div>
       </div>
-
-      {/* ── RIGHT: PERSISTENT AI TUTOR ─────────────────────────────────── */}
-      {showTutor && (
-        <div className="w-80 lg:w-96 flex-shrink-0 bg-surface border-l border-glass-border flex flex-col h-full">
-           <div className="p-8 border-b border-glass-border flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                 <Brain className="text-primary" size={20}/>
-                 <h2 className="text-xs font-black uppercase tracking-widest text-[var(--text-main)]">Lesson Assistant</h2>
-              </div>
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-           </div>
-           
-           <div className="flex-grow p-6 overflow-y-auto custom-scrollbar space-y-6">
-              <TutorBubble msg="I've analyzed this module. It focuses on the second law of thermodynamics. Need help with the formulas?" />
-              <TutorBubble msg="Pro-tip: Focus on the entropy equation at 04:30. It's often in the final exam." />
-           </div>
-
-           <div className="p-6 bg-white/[0.02] border-t border-glass-border">
-              <div className="bg-black/20 border border-glass-border rounded-xl p-2 flex gap-2">
-                 <input 
-                   placeholder="Ask about this lesson..." 
-                   className="flex-grow bg-transparent text-[10px] font-medium outline-none p-2 text-white"
-                 />
-                 <button className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center">
-                    <MessageSquare size={14}/>
-                 </button>
-              </div>
-           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TutorBubble({ msg }) {
-  return (
-    <div className="flex gap-3">
-       <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center text-primary flex-shrink-0 mt-1">
-          <Sparkles size={12}/>
-       </div>
-       <div className="bg-white/5 border border-glass-border p-4 rounded-2xl text-[10px] font-medium leading-relaxed text-white/80 italic">
-          "{msg}"
-       </div>
     </div>
   );
 }

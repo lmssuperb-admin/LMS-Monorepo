@@ -18,5 +18,23 @@
     "userid": 5,
     "roleid": 5,
     "contextlevel": "course"
+  },
+  {
+    "userid": 3,
+    "roleid": 5,
+    "contextlevel": "course",
+    "instanceid": 51
+  },
+  {
+    "userid": 4,
+    "roleid": 5,
+    "contextlevel": "course",
+    "instanceid": 51
+  },
+  {
+    "userid": 5,
+    "roleid": 5,
+    "contextlevel": "course",
+    "instanceid": 51
   }
 ]

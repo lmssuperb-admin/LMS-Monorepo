@@ -32,7 +32,7 @@ router.post('/:id/activities', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const content = await moodleService.getCourseContents(req.params.id);
+    const content = await moodleService.getCourseWithUrls(req.params.id);
     res.json(content || []);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

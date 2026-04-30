@@ -55,8 +55,8 @@ function CommandBar() {
 
           {/* Catalog Link */}
           <NavButton 
-            active={pathname.includes('/courses')}
-            onClick={() => router.push(role === 'student' ? '/student' : '/admin')}
+            active={pathname.startsWith('/courses')}
+            onClick={() => router.push('/courses')}
             icon={<BookOpen size={22} />} 
             label="Courses" 
           />
@@ -113,8 +113,8 @@ function NavButton({ active, icon, label, onClick }) {
       }`}>
         {icon}
       </div>
-      <span className={`text-[8px] font-black uppercase tracking-[0.2em] transition-all ${
-        active ? 'text-primary scale-105' : 'text-[var(--text-muted)] opacity-50 overflow-hidden w-0 group-hover:w-auto group-hover:opacity-100 transition-all'
+      <span className={`text-[9px] font-[900] uppercase tracking-[0.25em] transition-all duration-300 ${
+        active ? 'text-primary scale-105 opacity-100' : 'text-[var(--text-muted)] opacity-40 overflow-hidden w-0 group-hover:w-auto group-hover:opacity-80 transition-all'
       }`}>
         {label}
       </span>
