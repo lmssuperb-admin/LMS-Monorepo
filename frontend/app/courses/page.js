@@ -41,14 +41,15 @@ export default function CourseCatalog() {
     try {
       const res = await fetch('http://localhost:4000/api/courses');
       const data = await res.json();
-      setCourses((data || []).map(c => ({
+      setCourses((data || []).map((c, idx) => ({
         id: c.id,
         name: c.fullname,
         author: 'Admin User',
         date: '24 Apr 2026',
         views: Math.floor(Math.random() * 10),
-        progress: Math.floor(Math.random() * 100),
-        enrolled: Math.random() > 0.5,
+        progress: idx === 0 ? 15 : Math.floor(Math.random() * 100),
+        enrolled: idx < 3, // Mock first 3 as enrolled
+        isRecommended: idx >= 3 && idx < 6, // Mock next 3 as recommended
         image: getCourseGradient(c.id)
       })));
     } catch (err) { console.error(err); }
@@ -71,11 +72,44 @@ export default function CourseCatalog() {
     course.author.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const allContent = filteredCourses;
-  const myLearning = courses.filter(c => c.enrolled);
+  const recommendedCourses = [
+    {
+      id: 101, // Mock ID for static course
+      name: "POSH Compliance - Prevention of Sexual Harassment",
+      author: "Admin User",
+      date: "30 Apr 2026",
+      views: 1240,
+      enrolled: false,
+      isRecommended: true,
+      image: "from-blue-600 to-indigo-700",
+      isStatic: true
+    },
+    {
+      id: 102,
+      name: "Advanced Cybersecurity Fundamentals",
+      author: "Admin User",
+      date: "28 Apr 2026",
+      views: 850,
+      enrolled: false,
+      isRecommended: true,
+      image: "from-emerald-500 to-teal-600",
+      isStatic: true
+    },
+    {
+      id: 103,
+      name: "Effective Workplace Communication",
+      author: "Admin User",
+      date: "25 Apr 2026",
+      views: 2100,
+      enrolled: false,
+      isRecommended: true,
+      image: "from-rose-500 to-orange-600",
+      isStatic: true
+    }
+  ];
 
-  const totalPages = Math.ceil(allContent.length / itemsPerPage) || 1;
-  const pagedContent = allContent.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const enrolledCourses = filteredCourses.filter(c => c.enrolled);
+  const myLearningCourses = enrolledCourses.filter(c => c.progress > 0);
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">
@@ -84,99 +118,95 @@ export default function CourseCatalog() {
   );
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto px-10 py-8 min-h-screen bg-[var(--background)] flex flex-col gap-12">
+    <div className="w-full max-w-[1800px] mx-auto px-6 lg:px-12 py-8 min-h-screen bg-[var(--background)] flex flex-col gap-16 transition-all duration-500">
       
-      {/* ── TOP STATS: MY COURSES ── */}
+      {/* ── TOP STATS ── */}
       <section>
-        <h2 className="text-xl font-black text-[var(--text-main)] mb-6">My Courses</h2>
+        <div className="flex items-center justify-between mb-8">
+           <div>
+              <h1 className="text-3xl font-black text-[var(--text-main)] italic">Academy Library</h1>
+              <p className="text-sm font-bold text-[var(--text-muted)] mt-1">Discover, Learn, and Master new skills</p>
+           </div>
+           <div className="flex items-center gap-4 bg-surface border border-glass-border rounded-2xl p-1.5 shadow-sm">
+             <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={16} />
+                <input 
+                  type="text" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search courses..." 
+                  className="bg-transparent border-none py-2.5 pl-12 pr-4 text-sm text-[var(--text-main)] focus:outline-none placeholder:text-[var(--text-muted)] w-64"
+                />
+             </div>
+           </div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          <CompactStatCard count={courses.length} label="Enrolled Courses" icon={<BookOpen size={18} />} color="blue" />
-          <CompactStatCard count={courses.filter(c => c.progress > 0 && c.progress < 100).length || 1} label="In Progress Courses" icon={<Clock size={18} />} color="purple" />
-          <CompactStatCard count={courses.filter(c => c.progress === 100).length} label="Completed Courses" icon={<CheckCircle2 size={18} />} color="green" />
-          <CompactStatCard count={0} label="Certificates Earned" icon={<FileCheck size={18} />} color="cyan" />
+          <CompactStatCard count={courses.length} label="Available Courses" icon={<BookOpen size={18} />} color="blue" />
+          <CompactStatCard count={enrolledCourses.length} label="My Enrolments" icon={<Users size={18} />} color="purple" />
+          <CompactStatCard count={myLearningCourses.length} label="Active Learning" icon={<Clock size={18} />} color="green" />
+          <CompactStatCard count={0} label="Certificates" icon={<Award size={18} />} color="cyan" />
           <CompactStatCard count={1} label="Learning Hours" icon={<TrendingUp size={18} />} color="yellow" />
         </div>
       </section>
 
-      {/* ── DISCOVER BAR ── */}
-      <section>
-        <div className="flex flex-col gap-4">
-          <h2 className="text-lg font-black text-[var(--text-main)]">Discover</h2>
-          <div className="flex items-center gap-4 bg-surface border border-glass-border rounded-2xl p-2 px-4 shadow-sm">
-            <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-xl text-primary text-xs font-black cursor-pointer hover:bg-primary/20 transition-all">
-              <div className="w-5 h-5 bg-primary rounded flex items-center justify-center text-white text-[10px]">C</div>
-              Company Workspace
-              <ChevronRight className="rotate-90" size={14} />
-            </div>
-            <div className="flex-grow relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" size={16} />
-              <input 
-                type="text" 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search description, title, author, tags" 
-                className="w-full bg-transparent border-none py-3 pl-12 pr-4 text-sm text-[var(--text-main)] focus:outline-none placeholder:text-[var(--text-muted)]"
-              />
-            </div>
-            <button className="p-3 text-[var(--text-muted)] hover:text-primary transition-colors">
-              <Settings2 size={20} />
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* ── ALL CONTENT ── */}
-      <section>
+      {/* ── SECTION 1: RECOMMENDED BY ADMIN (STATIC UI) ── */}
+      <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
         <div className="flex items-center justify-between mb-8">
-          <h2 className="text-xl font-black text-[var(--text-main)]">All Content</h2>
-          <Link href="/courses/all" className="text-primary text-xs font-black hover:underline uppercase tracking-widest">View All</Link>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
-          {pagedContent.map(course => (
-            <CourseCard key={course.id} course={course} />
-          ))}
-          {pagedContent.length === 0 && (
-             <p className="text-sm font-bold text-[var(--text-muted)] italic col-span-full py-10">No courses available.</p>
-          )}
-        </div>
-
-        {/* Pagination */}
-        <div className="flex items-center justify-center gap-4 mt-8">
-          <button 
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            className="w-10 h-10 rounded-xl bg-surface border border-glass-border flex items-center justify-center text-[var(--text-muted)] hover:text-primary transition-all shadow-sm disabled:opacity-30 disabled:hover:text-[var(--text-muted)]"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <div className="px-6 py-2 bg-surface border border-glass-border rounded-xl text-xs font-black text-[var(--text-main)] shadow-sm">
-            {currentPage} / {totalPages}
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-8 bg-primary rounded-full"></div>
+            <h2 className="text-2xl font-black text-[var(--text-main)]">Recommended by Admin</h2>
           </div>
-          <button 
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            className="w-10 h-10 rounded-xl bg-surface border border-glass-border flex items-center justify-center text-[var(--text-muted)] hover:text-primary transition-all shadow-sm disabled:opacity-30 disabled:hover:text-[var(--text-muted)]"
-          >
-            <ChevronRight size={20} />
-          </button>
-        </div>
-      </section>
-
-      {/* ── MY LEARNING ── */}
-      <section className="pb-10">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-xl font-black text-[var(--text-main)]">My Learning</h2>
-          <Link href="/courses/my" className="text-primary text-xs font-black hover:underline uppercase tracking-widest">View All</Link>
+          <span className="px-4 py-1.5 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest rounded-full">Pro Picks</span>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
-           {myLearning.length > 0 ? myLearning.slice(0, 1).map(course => (
-             <div key={course.id} className="col-span-full md:col-span-1 lg:col-span-1">
+          {recommendedCourses.map(course => (
+            <CourseCard key={course.id} course={course} />
+          ))}
+        </div>
+      </section>
+
+      {/* ── SECTION 2: SPECIFIC USERS ENROLLED (ASSIGNED) ── */}
+      <section className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-8 bg-secondary rounded-full"></div>
+            <h2 className="text-2xl font-black text-[var(--text-main)]">Assigned Content</h2>
+          </div>
+          <p className="text-sm font-bold text-[var(--text-muted)]">Courses curated for your profile</p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+          {enrolledCourses.length > 0 ? enrolledCourses.map(course => (
+            <CourseCard key={course.id} course={course} />
+          )) : (
+             <p className="text-sm font-bold text-[var(--text-muted)] italic col-span-full">No assigned courses found.</p>
+          )}
+        </div>
+      </section>
+
+      {/* ── SECTION 3: MY LEARNING ── */}
+      <section className="pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-8 bg-emerald-500 rounded-full"></div>
+            <h2 className="text-2xl font-black text-[var(--text-main)]">My Learning</h2>
+          </div>
+          <Link href="/courses/my" className="text-primary text-xs font-black hover:underline uppercase tracking-widest flex items-center gap-2">
+            View All <ChevronRight size={14} />
+          </Link>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+           {myLearningCourses.length > 0 ? myLearningCourses.map(course => (
+             <div key={course.id}>
                 <CourseCard course={course} hideMeta />
              </div>
            )) : (
-             <p className="text-sm font-bold text-[var(--text-muted)] italic col-span-full">Start your first course to see it here!</p>
+             <div className="col-span-full py-10 academy-card border-none bg-surface-hover/30 p-10 flex flex-col items-center justify-center text-center">
+                <Clock size={40} className="text-primary/20 mb-4" />
+                <p className="text-base font-bold text-[var(--text-muted)] italic max-w-xs">Start your first course to track your progress here!</p>
+             </div>
            )}
         </div>
       </section>
@@ -213,11 +243,20 @@ function CompactStatCard({ count, label, icon, color }) {
 function CourseCard({ course, hideMeta = false }) {
   return (
     <Link 
-      href={`/courses/${course.id}`}
+      href={course.enrolled ? `/courses/${course.id}` : `/courses/${course.id}/enroll`}
       className="bg-surface border border-glass-border rounded-2xl overflow-hidden group shadow-sm hover:shadow-xl hover:shadow-primary/5 transition-all duration-500 flex flex-col"
     >
       {/* Thumbnail */}
       <div className={`h-40 bg-gradient-to-br ${course.image} relative flex items-center justify-center overflow-hidden`}>
+        {/* Recommended Badge */}
+        {course.isRecommended && (
+           <div className="absolute top-4 left-4 z-20">
+              <span className="px-3 py-1 bg-white/20 backdrop-blur-md text-white text-[9px] font-black uppercase tracking-widest rounded-lg border border-white/20 shadow-xl">
+                 Recommended
+              </span>
+           </div>
+        )}
+
         <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
         <div className="bg-white/20 backdrop-blur-md p-4 rounded-2xl border border-white/20 shadow-2xl scale-90 group-hover:scale-100 transition-all">
            <div className="w-24 h-16 bg-white/40 rounded flex flex-col gap-1 p-2">

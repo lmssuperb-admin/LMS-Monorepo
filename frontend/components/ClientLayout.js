@@ -17,7 +17,8 @@ export default function ClientLayout({ children }) {
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
   const isCodeEditor = pathname?.startsWith('/code_editor');
-  const hideGlobalUI = isLoginPage || isCodeEditor;
+  const isNestedCourse = pathname?.startsWith('/courses/') && pathname !== '/courses';
+  const hideGlobalUI = isLoginPage || isCodeEditor || isNestedCourse;
 
   return (
     <SessionProvider>
