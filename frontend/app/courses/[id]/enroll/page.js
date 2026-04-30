@@ -31,21 +31,7 @@ export default function CourseEnrollmentPage() {
   const [loading, setLoading] = useState(true);
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [expandedEnroll, setExpandedEnroll] = useState(false);
-
-  const STATIC_POSH_CURRICULUM = [
-    {
-      name: "Topic 1",
-      modules: [
-        { name: "Posh Policy India", modname: "url" },
-        { name: "POSH India forms", modname: "resource" },
-        { name: "Maxval session", modname: "zoom" },
-        { name: "CP - Posh (Anti Sexual Harassment)", modname: "url" },
-        { name: "Learning New language", modname: "lesson" },
-        { name: "Test session", modname: "zoom" },
-        { name: "quiz test 23", modname: "quiz" },
-      ]
-    }
-  ];
+  const [activeModule, setActiveModule] = useState(null);
 
   useEffect(() => {
     fetchCourseDetails();
@@ -99,12 +85,29 @@ export default function CourseEnrollmentPage() {
     </div>
   );
 
+
+
+  const STATIC_POSH_CURRICULUM = [
+    {
+      name: "Topic 1",
+      modules: [
+        { name: "Posh Policy India", modname: "resource", url: "/Posh_Policy.pdf" },
+        { name: "POSH India forms", modname: "resource", url: "/Posh_Forms.pdf" },
+        { name: "Maxval session", modname: "zoom", url: "https://zoom.us/test" },
+        { name: "CP - Posh (Anti Sexual Harassment)", modname: "url", url: "https://example.com" },
+        { name: "Learning New language", modname: "lesson", url: "/Lesson.pdf" },
+        { name: "Test session", modname: "zoom", url: "https://zoom.us/test" },
+        { name: "quiz test 23", modname: "quiz", url: "https://example.com/quiz" },
+      ]
+    }
+  ];
+
   if (isEnrolled) {
     const curriculum = (course.curriculum && course.curriculum.length > 0) ? course.curriculum : STATIC_POSH_CURRICULUM;
 
     return (
       <div className="min-h-screen bg-[var(--background)] pb-20 font-sans">
-        <div className="max-w-[1400px] mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in zoom-in-95 duration-700">
+        <div className="max-w-[1440px] mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in zoom-in-95 duration-700">
            
            {/* ── LEFT COLUMN: CURRICULUM SIDEBAR ── */}
            <div className="lg:col-span-3">
@@ -149,14 +152,19 @@ export default function CourseEnrollmentPage() {
                                 if (mod.modname === 'lesson') Icon = User;
 
                                 const isCompleted = mod.name === "Learning New language";
+                                const isActive = activeModule?.name === mod.name;
 
                                 return (
-                                   <div key={mIdx} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-hover transition-all group cursor-pointer">
+                                   <div 
+                                      key={mIdx} 
+                                      onClick={() => setActiveModule(mod)}
+                                      className={`flex items-center justify-between p-2.5 rounded-lg transition-all group cursor-pointer ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-surface-hover'}`}
+                                   >
                                       <div className="flex items-center gap-3">
-                                         <div className="w-8 h-8 rounded-lg bg-background flex items-center justify-center text-[var(--text-muted)] group-hover:scale-105 transition-all shadow-sm">
+                                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-sm ${isActive ? 'bg-primary text-white' : 'bg-background text-[var(--text-muted)]'}`}>
                                             <Icon size={14} />
                                          </div>
-                                         <span className="text-[10px] font-bold text-[var(--text-main)] group-hover:text-primary transition-colors max-w-[140px] line-clamp-1">{mod.name}</span>
+                                         <span className={`text-[10px] font-bold line-clamp-1 max-w-[140px] ${isActive ? 'text-primary' : 'text-[var(--text-main)] group-hover:text-primary'}`}>{mod.name}</span>
                                       </div>
                                       <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${isCompleted ? 'border-sky-500 bg-sky-500 text-white' : 'border-sky-500/20 text-transparent'}`}>
                                          {isCompleted && <CheckCircle2 size={10} fill="currentColor" />}
@@ -171,97 +179,146 @@ export default function CourseEnrollmentPage() {
               </div>
            </div>
 
-           {/* ── RIGHT COLUMN: DASHBOARD ── */}
-           <div className="lg:col-span-9 space-y-6">
-              {/* Enrollment Banner */}
-              <div className="bg-emerald-500/5 border border-emerald-500/10 text-emerald-600 dark:text-emerald-400 p-3 rounded-lg text-xs font-black animate-in fade-in slide-in-from-top-4 duration-500">
-                 You are enrolled in the course.
-              </div>
-
-              {/* Course Image Banner */}
-              <div className="academy-card overflow-hidden bg-surface border-none shadow-lg rounded-[24px] animate-in fade-in slide-in-from-bottom-4 duration-700">
-                 <div className="relative h-[300px] w-full">
-                    <Image 
-                       src={course.image} 
-                       alt={course.fullname} 
-                       fill 
-                       className="object-cover opacity-90"
-                       priority
-                    />
-                 </div>
-              </div>
-
-              {/* Course Title & Progress Area */}
-              <div className="space-y-6">
-                 <h1 className="text-2xl font-black text-[var(--text-main)] tracking-tight">{course.shortname || course.fullname}</h1>
-                 
-                 <div className="flex items-center gap-6">
-                    <div className="flex-grow h-1.5 bg-slate-100 dark:bg-slate-800/30 rounded-full overflow-hidden">
-                       <div className="h-full bg-secondary w-[2%] rounded-full shadow-[0_0_8px_rgba(14,165,233,0.3)] transition-all duration-1000"></div>
-                    </div>
-                    <div className="relative flex items-center justify-center">
-                       <div className="w-10 h-10 rounded-full bg-surface flex items-center justify-center text-[9px] font-black text-[var(--text-main)] border-2 border-slate-100 dark:border-slate-800 shadow-sm">
-                         0%
+           {/* ── RIGHT COLUMN: MAIN CONTENT ── */}
+           <div className="lg:col-span-9">
+              {activeModule ? (
+                 /* ── MODULE PLAYER VIEW ── */
+                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+                    {/* Player Header */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-4 rounded-[20px] border border-glass-border shadow-sm">
+                       <div>
+                          <h2 className="text-lg font-black text-[var(--text-main)] tracking-tight">{activeModule.name}</h2>
+                          <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Module {activeModule.modname}</p>
+                       </div>
+                       <div className="flex items-center gap-3">
+                          <button 
+                             onClick={() => setActiveModule(null)}
+                             className="px-6 py-2 rounded-xl text-xs font-black text-[var(--text-muted)] bg-surface-hover hover:text-primary transition-all border border-glass-border flex items-center gap-2"
+                          >
+                             <ChevronLeft size={14} /> Previous
+                          </button>
+                          <button className="px-8 py-2.5 rounded-xl text-xs font-black text-white bg-primary hover:bg-secondary transition-all shadow-lg shadow-primary/20 flex items-center gap-2">
+                             Next <ChevronLeft size={14} className="rotate-180" />
+                          </button>
                        </div>
                     </div>
-                    <button 
-                     onClick={() => router.push(`/courses/${id}`)}
-                     className="px-10 py-3 bg-[#00A3FF] hover:bg-[#0092E6] text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-md shadow-blue-500/20 transition-all active:scale-95"
-                    >
-                       Start
-                    </button>
-                 </div>
-              </div>
 
-              {/* About Section */}
-              <div className="space-y-3 pt-6 border-t border-glass-border">
-                 <h2 className="text-sm font-black text-[var(--text-main)] uppercase tracking-wider opacity-60">About Course</h2>
-                 <p className="text-sm font-bold text-[var(--text-main)] opacity-80 max-w-3xl leading-relaxed">
-                    {course.summary}
-                 </p>
-              </div>
-
-              {/* Progress Stat Cards */}
-              <div className="space-y-6">
-                 <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#00A3FF]"></div>
-                    <h2 className="text-sm font-black text-[var(--text-main)] uppercase tracking-wider">Your Learning Progress</h2>
+                    {/* Content Display (PDF Viewer) */}
+                    <div className="academy-card bg-surface rounded-[24px] border-glass-border overflow-hidden shadow-xl min-h-[800px] flex flex-col">
+                       {activeModule.modname === 'resource' || activeModule.modname === 'lesson' ? (
+                          <div className="flex-grow relative bg-slate-100 dark:bg-slate-900/50">
+                             {/* Mock PDF View Container */}
+                             <div className="absolute inset-0 flex flex-col">
+                                {/* PDF Toolbar Mock */}
+                                <div className="bg-white dark:bg-slate-800 border-b border-glass-border p-3 flex items-center justify-between shadow-sm z-10">
+                                   <div className="flex items-center gap-4">
+                                      <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                         <BookOpen size={16} />
+                                      </div>
+                                      <span className="text-xs font-black text-slate-700 dark:text-slate-200">{activeModule.name}</span>
+                                   </div>
+                                   <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
+                                      <span className="px-3 py-1 bg-slate-100 dark:bg-slate-700 rounded-md">1 / 1</span>
+                                      <div className="flex items-center gap-1 border-x border-glass-border px-4">
+                                         <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all"><ChevronLeft size={14} /></button>
+                                         <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all rotate-180"><ChevronLeft size={14} /></button>
+                                      </div>
+                                      <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all"><Layers size={14} /></button>
+                                   </div>
+                                </div>
+                                
+                                {/* The PDF Content (Iframe for scrollable PDF experience) */}
+                                <div className="flex-grow overflow-hidden">
+                                   <iframe 
+                                      src={activeModule.url || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"} 
+                                      className="w-full h-full border-none"
+                                      title="PDF Viewer"
+                                   />
+                                </div>
+                             </div>
+                          </div>
+                       ) : (
+                          <div className="flex-grow flex flex-col items-center justify-center p-20 text-center space-y-6">
+                             <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center text-primary animate-pulse">
+                                <Icon size={40} />
+                             </div>
+                             <div className="space-y-2">
+                                <h3 className="text-xl font-black text-[var(--text-main)]">Ready to start?</h3>
+                                <p className="text-sm font-medium text-[var(--text-muted)] max-w-md mx-auto">
+                                   This module will open in a new window or your external application.
+                                </p>
+                             </div>
+                             <a 
+                                href={activeModule.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="px-10 py-4 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-secondary transition-all shadow-lg shadow-primary/20"
+                             >
+                                Open Module
+                             </a>
+                          </div>
+                       )}
+                    </div>
                  </div>
+              ) : (
+                 /* ── DASHBOARD VIEW ── */
+                 <div className="space-y-6 animate-in fade-in duration-700">
+                    {/* Enrollment Banner */}
+                    <div className="bg-emerald-500/5 border border-emerald-500/10 text-emerald-600 dark:text-emerald-400 p-3 rounded-lg text-xs font-black">
+                       You are enrolled in the course.
+                    </div>
 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <ProgressStatCard 
-                       value="0%" 
-                       label="Course Progress" 
-                       subtext="Completed" 
-                       icon={<User size={18} className="text-purple-500" />} 
-                       color="purple" 
-                    />
-                    <ProgressStatCard 
-                       value="0 min" 
-                       label="Time Spent" 
-                       subtext="Learning Time" 
-                       icon={<Clock size={18} className="text-blue-500" />} 
-                       color="blue" 
-                    />
-                    <ProgressStatCard 
-                       value="0" 
-                       label="Activity Done" 
-                       subtext="Completed" 
-                       badge="0/19"
-                       icon={<Layers size={18} className="text-emerald-500" />} 
-                       color="emerald" 
-                    />
-                    <ProgressStatCard 
-                       value="0%" 
-                       label="Quiz Score" 
-                       subtext="Average Score" 
-                       icon={<HelpCircle size={18} className="text-amber-500" />} 
-                       color="amber" 
-                    />
+                    {/* Course Image Banner */}
+                    <div className="academy-card overflow-hidden bg-surface border-none shadow-lg rounded-[24px]">
+                       <div className="relative h-[300px] w-full">
+                          <Image src={course.image} alt={course.fullname} fill className="object-cover opacity-90" priority />
+                       </div>
+                    </div>
+
+                    {/* Course Title & Progress */}
+                    <div className="space-y-6">
+                       <h1 className="text-2xl font-black text-[var(--text-main)] tracking-tight">{course.shortname || course.fullname}</h1>
+                       <div className="flex items-center gap-6">
+                          <div className="flex-grow h-1.5 bg-slate-100 dark:bg-slate-800/30 rounded-full overflow-hidden">
+                             <div className="h-full bg-secondary w-[2%] rounded-full shadow-[0_0_8px_rgba(14,165,233,0.3)]"></div>
+                          </div>
+                          <div className="w-10 h-10 rounded-full bg-surface flex items-center justify-center text-[9px] font-black text-[var(--text-main)] border-2 border-slate-100 dark:border-slate-800 shadow-sm">
+                            0%
+                          </div>
+                          <button 
+                             onClick={() => setActiveModule(curriculum[0].modules[0])}
+                             className="px-10 py-3 bg-[#00A3FF] hover:bg-[#0092E6] text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-md shadow-blue-500/20 transition-all active:scale-95"
+                          >
+                             Start
+                          </button>
+                       </div>
+                    </div>
+
+                    {/* About & Stats */}
+                    <div className="space-y-8 pt-6 border-t border-glass-border">
+                       <div className="space-y-3">
+                          <h2 className="text-sm font-black text-[var(--text-main)] uppercase tracking-wider opacity-60">About Course</h2>
+                          <p className="text-sm font-bold text-[var(--text-main)] opacity-80 max-w-3xl leading-relaxed">{course.summary}</p>
+                       </div>
+
+                       <div className="space-y-6">
+                          <div className="flex items-center gap-2">
+                             <div className="w-1.5 h-1.5 rounded-full bg-[#00A3FF]"></div>
+                             <h2 className="text-sm font-black text-[var(--text-main)] uppercase tracking-wider">Your Learning Progress</h2>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                             <ProgressStatCard value="0%" label="Course Progress" subtext="Completed" icon={<User size={18} className="text-purple-500" />} color="purple" />
+                             <ProgressStatCard value="0 min" label="Time Spent" subtext="Learning Time" icon={<Clock size={18} className="text-blue-500" />} color="blue" />
+                             <ProgressStatCard value="0" label="Activity Done" subtext="Completed" badge="0/19" icon={<Layers size={18} className="text-emerald-500" />} color="emerald" />
+                             <ProgressStatCard value="0%" label="Quiz Score" subtext="Average Score" icon={<HelpCircle size={18} className="text-amber-500" />} color="amber" />
+                          </div>
+                       </div>
+                    </div>
                  </div>
-              </div>
+              )}
            </div>
-         </div>
+
+        </div>
       </div>
     );
   }
