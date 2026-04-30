@@ -52,13 +52,29 @@ export default function CourseAcademyPlayer() {
       const res = await fetch(`http://localhost:4000/api/courses/${id}`);
       const data = await res.json();
       
+      // 🕵️ Filter out 'Announcements' and 'Forum' modules that are just clutter
+      const filteredCurriculum = (data && data.length > 0 ? data : STATIC_POSH_CURRICULUM).map(topic => ({
+        ...topic,
+        modules: (topic.modules || []).filter(m => 
+          m.name?.toLowerCase() !== 'announcements' && 
+          m.modname !== 'forum'
+        ).map(m => {
+          // 📄 Smart PDF Detection: If a URL activity points to a PDF, treat it as a resource
+          const url = m.externalurl || m.url || '';
+          if (m.modname === 'url' && (url.toLowerCase().endsWith('.pdf') || url.includes('pluginfile.php'))) {
+             return { ...m, modname: 'resource', isDetectedPdf: true };
+          }
+          return m;
+        })
+      }));
+
       const courseData = {
         id: id,
-        fullname: data?.[0]?.name || "POSH Compliance",
+        fullname: filteredCurriculum?.[0]?.name || "POSH Compliance",
         shortname: "POSH",
         summary: "This course has an ILT presentation for the POSH course, a Policy Handout, and forms. It covers essential guidelines for preventing sexual harassment in the workplace.",
         image: "/posh_banner.png",
-        curriculum: data && data.length > 0 ? data : STATIC_POSH_CURRICULUM
+        curriculum: filteredCurriculum
       };
       
       setCourse(courseData);
@@ -218,18 +234,18 @@ export default function CourseAcademyPlayer() {
                               <div className="flex-grow overflow-hidden">
                                  {(() => {
                                     const moodleToken = localStorage.getItem('moodle_token') || '6219356d21396a8682054c7d0ccf825e';
-                                    let pdfUrl = activeModule.url;
-                                    
-                                    // If it's a Moodle resource, it likely has a contents array
-                                    if (activeModule.contents && activeModule.contents[0]) {
-                                       pdfUrl = activeModule.contents[0].fileurl;
-                                    }
+                                     let pdfUrl = activeModule.externalurl || activeModule.url;
+                                     
+                                     // If it's a Moodle resource, it likely has a contents array
+                                     if (activeModule.contents && activeModule.contents[0]) {
+                                        pdfUrl = activeModule.contents[0].fileurl;
+                                     }
 
-                                    // Append token if it's a Moodle pluginfile URL
-                                    if (pdfUrl && pdfUrl.includes('pluginfile.php')) {
-                                       const separator = pdfUrl.includes('?') ? '&' : '?';
-                                       pdfUrl = `${pdfUrl}${separator}token=${moodleToken}`;
-                                    }
+                                     // Append token if it's a Moodle pluginfile URL
+                                     if (pdfUrl && pdfUrl.includes('pluginfile.php')) {
+                                        const separator = pdfUrl.includes('?') ? '&' : '?';
+                                        pdfUrl = `${pdfUrl}${separator}token=${moodleToken}`;
+                                     }
 
                                     return (
                                        <iframe 
