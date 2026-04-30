@@ -16,7 +16,8 @@ import {
 export default function ClientLayout({ children }) {
   const pathname = usePathname();
   const isLoginPage = pathname === '/login';
-  const hideGlobalUI = isLoginPage;
+  const isCodeEditor = pathname?.startsWith('/code_editor');
+  const hideGlobalUI = isLoginPage || isCodeEditor;
 
   return (
     <SessionProvider>
@@ -24,7 +25,10 @@ export default function ClientLayout({ children }) {
         <div className="flex flex-col min-h-screen">
           {!hideGlobalUI && <Navbar />}
 
-          <main className={`flex-grow ${!hideGlobalUI ? 'pb-32' : ''}`}>
+          <main 
+            key={pathname}
+            className={`flex-grow animate-in fade-in duration-500 fill-mode-both ${!hideGlobalUI ? 'pb-32' : ''}`}
+          >
             {children}
           </main>
 

@@ -5,6 +5,7 @@ import {
   FileText, 
   Layout, 
   ChevronRight, 
+  ChevronLeft,
   Maximize2, 
   Minimize2,
   Play,
@@ -117,11 +118,12 @@ export default function CodingBodyNew({ backToMainComponent }) {
           <div className="flex items-center gap-4">
             <button 
               onClick={backToMainComponent}
-              className="p-2.5 rounded-xl hover:bg-white/5 text-[var(--text-muted)] transition-all"
+              className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-surface border border-glass-border hover:border-primary/50 text-[var(--text-main)] transition-all shadow-sm"
             >
-              <Layout size={18} />
+              <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+              <span className="text-[10px] font-black uppercase tracking-widest">Exit Editor</span>
             </button>
-            <div className="flex items-center gap-2">
+            <div className="hidden lg:flex items-center gap-2 ml-2">
               <h2 className="text-sm font-black text-[var(--text-main)] uppercase tracking-widest truncate max-w-[120px] md:max-w-none">Code Platform</h2>
               <div className="hidden sm:flex bg-primary/10 text-primary text-[8px] font-black px-2 py-0.5 rounded-full items-center gap-1">
                 <Sparkles size={8} /> PREMIUM
@@ -150,6 +152,14 @@ export default function CodingBodyNew({ backToMainComponent }) {
               className="flex-grow sm:flex-initial bg-surface border border-glass-border rounded-xl px-3 py-2 text-[10px] font-bold text-[var(--text-main)] outline-none focus:border-primary/50"
             >
               {TYPE_ITEMS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+
+            <select 
+              value={selectedDifficulty} 
+              onChange={(e) => setSelectedDifficulty(e.target.value)}
+              className="flex-grow sm:flex-initial bg-surface border border-glass-border rounded-xl px-3 py-2 text-[10px] font-bold text-[var(--text-main)] outline-none focus:border-primary/50"
+            >
+              {DIFFICULTY_ITEMS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
             </select>
           </div>
 
