@@ -114,10 +114,15 @@ export default function CourseEnrollmentPage() {
               <div className="academy-card bg-surface overflow-hidden rounded-[20px] border-glass-border sticky top-6 shadow-lg">
                  <div className="p-5 border-b border-glass-border space-y-4">
                     <div className="flex items-center justify-between">
-                       <h3 className="text-base font-black text-[var(--text-main)] tracking-tight">POSH</h3>
-                       <div className="p-1.5 rounded-lg bg-surface-hover text-[var(--text-muted)] cursor-pointer hover:text-primary transition-colors">
-                          <ChevronLeft size={14} className="rotate-180" />
-                       </div>
+                       <button 
+                          onClick={() => router.push('/courses')}
+                          className="flex items-center gap-2 group cursor-pointer"
+                       >
+                          <div className="p-1.5 rounded-lg bg-surface-hover text-[var(--text-muted)] group-hover:text-primary group-hover:bg-primary/10 transition-all">
+                             <ChevronLeft size={14} />
+                          </div>
+                          <h3 className="text-base font-black text-[var(--text-main)] tracking-tight group-hover:text-primary transition-colors">POSH</h3>
+                       </button>
                     </div>
                     
                     {/* Search Bar */}

@@ -41,17 +41,57 @@ export default function CourseCatalog() {
     try {
       const res = await fetch('http://localhost:4000/api/courses');
       const data = await res.json();
-      setCourses((data || []).map((c, idx) => ({
-        id: c.id,
-        name: c.fullname,
-        author: 'Admin User',
-        date: '24 Apr 2026',
-        views: Math.floor(Math.random() * 10),
-        progress: idx === 0 ? 15 : Math.floor(Math.random() * 100),
-        enrolled: idx < 3, // Mock first 3 as enrolled
-        isRecommended: idx >= 3 && idx < 6, // Mock next 3 as recommended
-        image: getCourseGradient(c.id)
-      })));
+      
+      const combined = [
+        // Real courses from API
+        ...(data || []).map((c, idx) => ({
+          id: c.id,
+          name: c.fullname,
+          author: 'Admin User',
+          date: '24 Apr 2026',
+          views: Math.floor(Math.random() * 10),
+          progress: idx === 0 ? 15 : 0,
+          enrolled: idx < 3,
+          isRecommended: false,
+          image: getCourseGradient(c.id)
+        })),
+        // Static Recommended courses
+        {
+          id: 'posh-101',
+          name: "POSH Compliance - Prevention of Sexual Harassment",
+          author: "Admin User",
+          date: "30 Apr 2026",
+          views: 1240,
+          enrolled: true, // Mocked as enrolled for demonstration
+          progress: 5,
+          isRecommended: true,
+          image: "from-blue-600 to-indigo-700"
+        },
+        {
+          id: 'cyber-102',
+          name: "Advanced Cybersecurity Fundamentals",
+          author: "Admin User",
+          date: "28 Apr 2026",
+          views: 850,
+          enrolled: false,
+          progress: 0,
+          isRecommended: true,
+          image: "from-emerald-500 to-teal-600"
+        },
+        {
+          id: 'comm-103',
+          name: "Effective Workplace Communication",
+          author: "Admin User",
+          date: "25 Apr 2026",
+          views: 2100,
+          enrolled: false,
+          progress: 0,
+          isRecommended: true,
+          image: "from-rose-500 to-orange-600"
+        }
+      ];
+
+      setCourses(combined);
     } catch (err) { console.error(err); }
     setLoading(false);
   };
@@ -72,44 +112,9 @@ export default function CourseCatalog() {
     course.author.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const recommendedCourses = [
-    {
-      id: 101, // Mock ID for static course
-      name: "POSH Compliance - Prevention of Sexual Harassment",
-      author: "Admin User",
-      date: "30 Apr 2026",
-      views: 1240,
-      enrolled: false,
-      isRecommended: true,
-      image: "from-blue-600 to-indigo-700",
-      isStatic: true
-    },
-    {
-      id: 102,
-      name: "Advanced Cybersecurity Fundamentals",
-      author: "Admin User",
-      date: "28 Apr 2026",
-      views: 850,
-      enrolled: false,
-      isRecommended: true,
-      image: "from-emerald-500 to-teal-600",
-      isStatic: true
-    },
-    {
-      id: 103,
-      name: "Effective Workplace Communication",
-      author: "Admin User",
-      date: "25 Apr 2026",
-      views: 2100,
-      enrolled: false,
-      isRecommended: true,
-      image: "from-rose-500 to-orange-600",
-      isStatic: true
-    }
-  ];
-
-  const enrolledCourses = filteredCourses.filter(c => c.enrolled);
-  const myLearningCourses = enrolledCourses.filter(c => c.progress > 0);
+  const recommendedCourses = courses.filter(c => c.isRecommended && !c.enrolled);
+  const enrolledCourses = filteredCourses.filter(c => c.enrolled && !c.isRecommended);
+  const myLearningCourses = courses.filter(c => c.enrolled);
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">

@@ -1,216 +1,356 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { 
-  Play, 
-  FileText, 
-  HelpCircle, 
   ChevronLeft, 
+  ChevronDown, 
+  Search, 
+  BookOpen, 
+  Video, 
+  FileText, 
+  ClipboardCheck, 
+  MousePointer2, 
   CheckCircle2, 
-  Lock, 
-  Brain, 
-  MessageSquare,
-  ChevronDown,
+  User, 
+  Clock, 
+  Layers, 
+  HelpCircle, 
+  Info,
   Loader2,
   BookMarked
 } from 'lucide-react';
-import { useRouter, useParams } from 'next/navigation';
+import Image from 'next/image';
 
-export default function CoursePlayer() {
+export default function CourseAcademyPlayer() {
   const router = useRouter();
   const { id } = useParams();
-  const [courseContent, setCourseContent] = useState([]);
+  const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeModule, setActiveModule] = useState(null);
 
+  const STATIC_POSH_CURRICULUM = [
+    {
+      name: "Topic 1",
+      modules: [
+        { name: "Posh Policy India", modname: "resource", url: "/Posh_Policy.pdf" },
+        { name: "POSH India forms", modname: "resource", url: "/Posh_Forms.pdf" },
+        { name: "Maxval session", modname: "zoom", url: "https://zoom.us/test" },
+        { name: "CP - Posh (Anti Sexual Harassment)", modname: "url", url: "https://example.com" },
+        { name: "Learning New language", modname: "lesson", url: "/Lesson.pdf" },
+        { name: "Test session", modname: "zoom", url: "https://zoom.us/test" },
+        { name: "quiz test 23", modname: "quiz", url: "https://example.com/quiz" },
+      ]
+    }
+  ];
+
   useEffect(() => {
-    fetchCourseStructure();
+    fetchCourseDetails();
   }, [id]);
 
-  const fetchCourseStructure = async () => {
+  const fetchCourseDetails = async () => {
     try {
       const res = await fetch(`http://localhost:4000/api/courses/${id}`);
       const data = await res.json();
-      setCourseContent(data || []);
-      // Auto-select first module
-      if (data?.[0]?.modules?.[0]) {
-        setActiveModule(data[0].modules[0]);
-      }
-    } catch (err) { console.error(err); }
-    setLoading(false);
+      
+      const courseData = {
+        id: id,
+        fullname: data?.[0]?.name || "POSH Compliance",
+        shortname: "POSH",
+        summary: "This course has an ILT presentation for the POSH course, a Policy Handout, and forms. It covers essential guidelines for preventing sexual harassment in the workplace.",
+        image: "/posh_banner.png",
+        curriculum: data && data.length > 0 ? data : STATIC_POSH_CURRICULUM
+      };
+      
+      setCourse(courseData);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-       <Loader2 className="animate-spin text-primary" size={40} />
-       <p className="text-xs font-black uppercase tracking-widest text-[var(--text-muted)]">Loading Curriculum...</p>
+      <Loader2 className="animate-spin text-primary" size={40} />
+      <p className="text-xs font-black uppercase tracking-widest text-[var(--text-muted)]">Entering Academy...</p>
     </div>
   );
 
-  return (
-    <div className="w-full h-[calc(100vh-80px)] flex overflow-hidden bg-[var(--background)]">
-      
-      {/* ── LEFT: CURRICULUM SIDEBAR ────────────────────────────────── */}
-      <div className="w-80 lg:w-96 flex-shrink-0 bg-surface border-r border-glass-border flex flex-col h-full">
-         <div className="p-8 border-b border-glass-border">
-            <button onClick={() => router.back()} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] hover:text-primary transition-all mb-4">
-               <ChevronLeft size={14} /> Back to Library
-            </button>
-            <h1 className="text-xl font-black text-[var(--text-main)]">Course Structure</h1>
-         </div>
-         
-         <div className="flex-grow overflow-y-auto custom-scrollbar p-6 space-y-6">
-            {Array.isArray(courseContent) ? courseContent.map((section, sidx) => (
-              <div key={section.id || sidx} className="space-y-3">
-                 <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-muted)] ml-2">{section.name || 'Intro'}</h3>
-                 <div className="space-y-1">
-                    {section.modules?.map((mod) => (
-                      <button 
-                        key={mod.id}
-                        onClick={() => setActiveModule(mod)}
-                        className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all text-left ${
-                          activeModule?.id === mod.id 
-                            ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                            : 'hover:bg-white/5 text-[var(--text-muted)]'
-                        }`}
-                      >
-                         <div className={`p-2 rounded-lg ${activeModule?.id === mod.id ? 'bg-white/20 text-white' : 'bg-white/5'}`}>
-                            {mod.modname === 'resource' ? <FileText size={16}/> : <Play size={16}/>}
-                         </div>
-                         <div className="flex-grow min-w-0">
-                            <p className="text-xs font-bold truncate leading-tight">{mod.name}</p>
-                            <p className={`text-[9px] mt-1 font-black uppercase tracking-widest ${activeModule?.id === mod.id ? 'text-white/60' : 'text-primary'}`}>
-                               {mod.modname}
-                            </p>
-                         </div>
-                      </button>
-                    ))}
-                 </div>
-              </div>
-            )) : (
-              <div className="text-center p-6 bg-red-500/10 text-red-500 font-bold rounded-xl text-[10px] uppercase tracking-widest border border-red-500/20">
-                 Failed to load curriculum: {courseContent?.error || 'Unknown API Error'}
-              </div>
-            )}
-         </div>
-      </div>
+  if (!course) return (
+    <div className="flex flex-col items-center justify-center min-h-screen gap-4 text-center p-10">
+      <h2 className="text-2xl font-black text-[var(--text-main)]">Course Not Found</h2>
+      <p className="text-[var(--text-muted)] max-w-xs">We couldn't retrieve the content for this academy path.</p>
+      <button onClick={() => router.push('/courses')} className="px-8 py-3 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest">
+         Back to Library
+      </button>
+    </div>
+  );
 
-      {/* ── CENTER: CONTENT PLAYER ────────────────────────────────────── */}
-      <div className="flex-grow flex flex-col h-full overflow-hidden">
+  const curriculum = course.curriculum;
+
+  return (
+    <div className="min-h-screen bg-[var(--background)] pb-20 font-sans">
+      <div className="max-w-[1440px] mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in zoom-in-95 duration-700">
          
-         {/* Player Area */}
-         <div className="flex-grow bg-black flex items-center justify-center p-10">
+         {/* ── LEFT COLUMN: CURRICULUM SIDEBAR ── */}
+         <div className="lg:col-span-3">
+            <div className="academy-card bg-surface overflow-hidden rounded-[20px] border-glass-border sticky top-6 shadow-lg">
+               <div className="p-5 border-b border-glass-border space-y-4">
+                  <div className="flex items-center justify-between">
+                     <button 
+                        onClick={() => router.push('/courses')}
+                        className="flex items-center gap-2 group cursor-pointer"
+                     >
+                        <div className="p-1.5 rounded-lg bg-surface-hover text-[var(--text-muted)] group-hover:text-primary group-hover:bg-primary/10 transition-all">
+                           <ChevronLeft size={14} />
+                        </div>
+                        <h3 className="text-base font-black text-[var(--text-main)] tracking-tight group-hover:text-primary transition-colors">POSH</h3>
+                     </button>
+                  </div>
+                  
+                  {/* Search Bar */}
+                  <div className="relative">
+                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] opacity-40" size={12} />
+                     <input 
+                        type="text" 
+                        placeholder="Search content..." 
+                        className="w-full bg-background border border-glass-border rounded-lg py-2 pl-9 pr-3 text-[10px] font-bold text-[var(--text-main)] focus:outline-none focus:border-primary transition-all"
+                     />
+                  </div>
+               </div>
+
+               <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
+                  {curriculum.map((topic, tIdx) => (
+                     <div key={tIdx} className="border-b border-glass-border last:border-none">
+                        <div className="p-5 flex items-center justify-between group cursor-pointer hover:bg-surface-hover/30 transition-all">
+                           <div className="space-y-0.5">
+                              <h4 className="text-xs font-black text-[var(--text-main)]">{topic.name}</h4>
+                              <p className="text-[9px] font-black text-[var(--text-muted)] opacity-50">({topic.modules?.length || 0}/13)</p>
+                           </div>
+                           <ChevronDown size={14} className="text-[var(--text-muted)] group-hover:text-primary transition-all" />
+                        </div>
+                        
+                        <div className="px-3 pb-5 space-y-0.5">
+                           {topic.modules?.map((mod, mIdx) => {
+                              let Icon = BookOpen;
+                              if (mod.modname === 'url') Icon = MousePointer2;
+                              if (mod.modname === 'resource') Icon = FileText;
+                              if (mod.modname === 'quiz') Icon = ClipboardCheck;
+                              if (mod.modname === 'zoom' || mod.name?.toLowerCase().includes('session')) Icon = Video;
+                              if (mod.modname === 'lesson') Icon = User;
+
+                              const isCompleted = mod.name === "Learning New language";
+                              const isActive = activeModule?.name === mod.name;
+
+                              return (
+                                 <div 
+                                    key={mIdx} 
+                                    onClick={() => setActiveModule(mod)}
+                                    className={`flex items-center justify-between p-2.5 rounded-lg transition-all group cursor-pointer ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-surface-hover'}`}
+                                 >
+                                    <div className="flex items-center gap-3">
+                                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-sm ${isActive ? 'bg-primary text-white' : 'bg-background text-[var(--text-muted)]'}`}>
+                                          <Icon size={14} />
+                                       </div>
+                                       <span className={`text-[10px] font-bold line-clamp-1 max-w-[140px] ${isActive ? 'text-primary' : 'text-[var(--text-main)] group-hover:text-primary'}`}>{mod.name}</span>
+                                    </div>
+                                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${isCompleted ? 'border-sky-500 bg-sky-500 text-white' : 'border-sky-500/20 text-transparent'}`}>
+                                       {isCompleted && <CheckCircle2 size={10} fill="currentColor" />}
+                                    </div>
+                                 </div>
+                              );
+                           })}
+                        </div>
+                     </div>
+                  ))}
+               </div>
+            </div>
+         </div>
+
+         {/* ── RIGHT COLUMN: MAIN CONTENT ── */}
+         <div className="lg:col-span-9">
             {activeModule ? (
-               <div className="w-full h-full max-w-5xl rounded-[40px] overflow-hidden shadow-3xl bg-[var(--surface)] border border-glass-border flex flex-col relative">
-                  {/* Header Overlay (Hidden on hover for video) */}
-                  <div className="absolute top-0 left-0 right-0 p-8 bg-gradient-to-b from-black/60 to-transparent z-10 pointer-events-none opacity-100 group-hover:opacity-0 transition-opacity duration-500">
-                     <h2 className="text-xl font-black text-white italic tracking-tight">{activeModule.name}</h2>
-                     <p className="text-white/60 text-[9px] font-black uppercase tracking-[0.3em] mt-1">Module: {activeModule.modname}</p>
+               /* ── MODULE PLAYER VIEW ── */
+               <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+                  {/* Player Header */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-4 rounded-[20px] border border-glass-border shadow-sm">
+                     <div>
+                        <h2 className="text-lg font-black text-[var(--text-main)] tracking-tight">{activeModule.name}</h2>
+                        <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Module {activeModule.modname}</p>
+                     </div>
+                     <div className="flex items-center gap-3">
+                        <button 
+                           onClick={() => setActiveModule(null)}
+                           className="px-6 py-2 rounded-xl text-xs font-black text-[var(--text-muted)] bg-surface-hover hover:text-primary transition-all border border-glass-border flex items-center gap-2"
+                        >
+                           <ChevronLeft size={14} /> Dashboard
+                        </button>
+                        <button className="px-8 py-2.5 rounded-xl text-xs font-black text-white bg-primary hover:bg-secondary transition-all shadow-lg shadow-primary/20 flex items-center gap-2">
+                           Next <ChevronLeft size={14} className="rotate-180" />
+                        </button>
+                     </div>
                   </div>
 
-                  {['resource', 'url', 'video', 'pdf'].includes(activeModule.modname || activeModule.type) ? (
-                    <div className="w-full h-full bg-[#333] relative group">
-                      {(() => {
-                        const fileUrl = activeModule.contents?.[0]?.fileurl;
-                        const externalUrl = activeModule.externalurl;
-                        const customPdfUrl = activeModule.pdfUrl || activeModule.pdfurl;
-                        const customVideoUrl = activeModule.videoUrl || activeModule.videourl;
-
-                        const url = customPdfUrl || customVideoUrl || fileUrl || externalUrl || activeModule.url;
-
-                        if (!url) {
-                          return (
-                            <div className="w-full h-full flex flex-col items-center justify-center text-white/30">
-                              {['resource', 'pdf'].includes(activeModule.modname || activeModule.type) ? <FileText size={64} className="mb-6 opacity-30" /> : <Play size={64} className="mb-6 opacity-30" />}
-                              <p className="text-sm font-black uppercase tracking-[0.2em] mb-2">Content Not Found</p>
-                              <p className="text-[10px] text-center max-w-[250px]">The file or link for this module is missing. Please recreate this activity in the admin console.</p>
-                            </div>
-                          );
-                        }
-
-                        const finalUrl = (url === fileUrl)
-                          ? url + (url.includes('?') ? '&' : '?') + 'token=' + (localStorage.getItem('moodle_token') || '6219356d21396a8682054c7d0ccf825e')
-                          : url;
-
-                        // PDF
-                        if (url.toLowerCase().includes('.pdf')) {
-                          return <iframe src={finalUrl} className="w-full h-full border-none" title="PDF Viewer" />;
-                        }
-
-                        // YouTube
-                        if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                          const videoId = url.match(/v=([^\&]+)/)?.[1] || url.match(/youtu\.be\/([^?]+)/)?.[1];
-                          return <iframe src={`https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`} className="w-full h-full border-none" allow="autoplay; encrypted-media" allowFullScreen />;
-                        }
-
-                        // Vimeo
-                        if (url.includes('vimeo.com')) {
-                          const videoId = url.split('/').pop();
-                          return <iframe src={`https://player.vimeo.com/video/${videoId}?autoplay=1`} className="w-full h-full border-none" allow="autoplay; fullscreen" allowFullScreen />;
-                        }
-
-                        // Direct video
-                        if (url.match(/\.(mp4|webm|ogg)(\?|$)/i)) {
-                          return <video controls autoPlay className="w-full h-full object-contain bg-black" src={finalUrl} />;
-                        }
-
-                        // Fallback
-                        return <iframe src={finalUrl} className="w-full h-full border-none" title="External Content" />;
-                      })()}
-                    </div>
-                  ) : (
-                    <div className="flex-grow flex flex-col items-center justify-center text-center p-20">
-                      <div className="w-24 h-24 rounded-3xl bg-primary/10 flex items-center justify-center text-primary mb-8 animate-float">
-                        <Brain size={48} />
-                      </div>
-                      <h2 className="text-3xl font-black text-[var(--text-main)] mb-4">{activeModule.name}</h2>
-                      <p className="text-[var(--text-muted)] max-w-lg mb-10 leading-relaxed italic">
-                        "This module contains interactive content. Click below to launch the activity in a safe environment."
-                      </p>
-                      <a 
-                        href={activeModule.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="bg-primary text-white px-12 py-5 rounded-3xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-primary/30 hover:scale-105 active:scale-95 transition-all"
-                      >
-                        Launch Activity
-                      </a>
-                    </div>
-                  )}
+                  {/* Content Display (PDF Viewer) */}
+                  <div className="academy-card bg-surface rounded-[24px] border-glass-border overflow-hidden shadow-xl min-h-[800px] flex flex-col">
+                     {activeModule.modname === 'resource' || activeModule.modname === 'lesson' ? (
+                        <div className="flex-grow relative bg-slate-100 dark:bg-slate-900/50">
+                           <div className="absolute inset-0 flex flex-col">
+                              {/* PDF Toolbar Mock */}
+                              <div className="bg-white dark:bg-slate-800 border-b border-glass-border p-3 flex items-center justify-between shadow-sm z-10">
+                                 <div className="flex items-center gap-4">
+                                    <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                       <BookOpen size={16} />
+                                    </div>
+                                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">{activeModule.name}</span>
+                                 </div>
+                                 <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
+                                    <span className="px-3 py-1 bg-slate-100 dark:bg-slate-700 rounded-md">1 / 1</span>
+                                    <div className="flex items-center gap-1 border-x border-glass-border px-4">
+                                       <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all"><ChevronLeft size={14} /></button>
+                                       <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all rotate-180"><ChevronLeft size={14} /></button>
+                                    </div>
+                                    <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all"><Layers size={14} /></button>
+                                 </div>
+                              </div>
+                              
+                              {/* The PDF Content */}
+                              <div className="flex-grow overflow-hidden">
+                                 <iframe 
+                                    src={activeModule.url || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"} 
+                                    className="w-full h-full border-none"
+                                    title="PDF Viewer"
+                                 />
+                              </div>
+                           </div>
+                        </div>
+                     ) : (
+                        <div className="flex-grow flex flex-col items-center justify-center p-20 text-center space-y-6">
+                           <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center text-primary animate-pulse">
+                              <BookMarked size={40} />
+                           </div>
+                           <div className="space-y-2">
+                              <h3 className="text-xl font-black text-[var(--text-main)]">External Activity</h3>
+                              <p className="text-sm font-medium text-[var(--text-muted)] max-w-md mx-auto">
+                                 This module opens in a secure external environment.
+                              </p>
+                           </div>
+                           <a 
+                              href={activeModule.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="px-10 py-4 bg-primary text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-secondary transition-all shadow-lg shadow-primary/20"
+                           >
+                              Open Module
+                           </a>
+                        </div>
+                     )}
+                  </div>
                </div>
             ) : (
-               <div className="text-center text-[var(--text-muted)] animate-pulse">
-                  <BookMarked size={64} className="mx-auto mb-6 opacity-20" />
-                  <p className="text-[10px] font-black uppercase tracking-[0.4em]">Initialize Curriculum Stream...</p>
+               /* ── DASHBOARD VIEW ── */
+               <div className="space-y-6 animate-in fade-in duration-700">
+                  {/* Course Image Banner */}
+                  <div className="academy-card overflow-hidden bg-surface border-none shadow-lg rounded-[24px]">
+                     <div className="relative h-[300px] w-full">
+                        <Image src={course.image} alt={course.fullname} fill className="object-cover opacity-90" priority />
+                     </div>
+                  </div>
+
+                  {/* Course Title & Progress */}
+                  <div className="space-y-6">
+                     <h1 className="text-2xl font-black text-[var(--text-main)] tracking-tight">{course.shortname || course.fullname}</h1>
+                     <div className="flex items-center gap-6">
+                        <div className="flex-grow h-1.5 bg-slate-100 dark:bg-slate-800/30 rounded-full overflow-hidden">
+                           <div className="h-full bg-secondary w-[5%] rounded-full shadow-[0_0_8px_rgba(14,165,233,0.3)]"></div>
+                        </div>
+                        <div className="w-10 h-10 rounded-full bg-surface flex items-center justify-center text-[9px] font-black text-[var(--text-main)] border-2 border-slate-100 dark:border-slate-800 shadow-sm">
+                          5%
+                        </div>
+                        <button 
+                           onClick={() => setActiveModule(curriculum[0].modules[0])}
+                           className="px-10 py-3 bg-[#00A3FF] hover:bg-[#0092E6] text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-md shadow-blue-500/20 transition-all active:scale-95"
+                        >
+                           Continue Learning
+                        </button>
+                     </div>
+                  </div>
+
+                  {/* About & Stats */}
+                  <div className="space-y-8 pt-6 border-t border-glass-border">
+                     <div className="space-y-3">
+                        <h2 className="text-sm font-black text-[var(--text-main)] uppercase tracking-wider opacity-60">About Course</h2>
+                        <p className="text-sm font-bold text-[var(--text-main)] opacity-80 max-w-3xl leading-relaxed">{course.summary}</p>
+                     </div>
+
+                     <div className="space-y-6">
+                        <div className="flex items-center gap-2">
+                           <div className="w-1.5 h-1.5 rounded-full bg-[#00A3FF]"></div>
+                           <h2 className="text-sm font-black text-[var(--text-main)] uppercase tracking-wider">Learning Progress</h2>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           <ProgressStatCard value="5%" label="Course Progress" subtext="Completed" icon={<User size={18} className="text-purple-500" />} color="purple" />
+                           <div className="academy-card bg-surface p-5 flex items-center justify-between group hover:shadow-lg transition-all duration-500 rounded-2xl">
+                              <div className="space-y-2">
+                                 <h3 className="text-2xl font-black text-[var(--text-main)]">12 min</h3>
+                                 <p className="text-[10px] font-black text-[var(--text-main)] opacity-60 flex items-center gap-1.5 uppercase tracking-wider">Time Spent <Info size={10} className="opacity-30" /></p>
+                              </div>
+                              <div className="w-14 h-14 rounded-[20px] flex items-center justify-center bg-blue-500/10 text-blue-500">
+                                 <Clock size={18} />
+                              </div>
+                           </div>
+                           <div className="academy-card bg-surface p-5 flex items-center justify-between group hover:shadow-lg transition-all duration-500 rounded-2xl">
+                              <div className="space-y-2">
+                                 <h3 className="text-2xl font-black text-[var(--text-main)]">1/19</h3>
+                                 <p className="text-[10px] font-black text-[var(--text-main)] opacity-60 flex items-center gap-1.5 uppercase tracking-wider">Activities <Info size={10} className="opacity-30" /></p>
+                              </div>
+                              <div className="w-14 h-14 rounded-[20px] flex items-center justify-center bg-emerald-500/10 text-emerald-500">
+                                 <Layers size={18} />
+                              </div>
+                           </div>
+                           <div className="academy-card bg-surface p-5 flex items-center justify-between group hover:shadow-lg transition-all duration-500 rounded-2xl">
+                              <div className="space-y-2">
+                                 <h3 className="text-2xl font-black text-[var(--text-main)]">0%</h3>
+                                 <p className="text-[10px] font-black text-[var(--text-main)] opacity-60 flex items-center gap-1.5 uppercase tracking-wider">Avg Score <Info size={10} className="opacity-30" /></p>
+                              </div>
+                              <div className="w-14 h-14 rounded-[20px] flex items-center justify-center bg-amber-500/10 text-amber-500">
+                                 <HelpCircle size={18} />
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
                </div>
             )}
          </div>
 
-         {/* Content Bar */}
-         <div className="h-24 bg-surface border-t border-glass-border px-10 flex items-center justify-between">
-            <div className="flex items-center gap-6">
-               <button className="flex flex-col items-center gap-1 group">
-                  <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-[var(--text-muted)] group-hover:bg-primary/10 group-hover:text-primary transition-all">
-                     <HelpCircle size={18}/>
-                  </div>
-                  <span className="text-[8px] font-black uppercase text-[var(--text-muted)]">Question</span>
-               </button>
-               <button className="flex flex-col items-center gap-1 group">
-                  <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-[var(--text-muted)] group-hover:bg-primary/10 group-hover:text-primary transition-all">
-                     <CheckCircle2 size={18}/>
-                  </div>
-                  <span className="text-[8px] font-black uppercase text-[var(--text-muted)]">Completed</span>
-               </button>
-            </div>
-            
-            <div className="flex gap-4">
-               <button className="px-8 py-3 rounded-2xl border border-glass-border text-[10px] font-black uppercase tracking-widest text-[var(--text-main)] hover:bg-white/5 transition-all">
-                  Previous Lesson
-               </button>
-               <button className="px-8 py-3 rounded-2xl bg-primary text-white font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20">
-                  Next: Lab Workflow
-               </button>
-            </div>
-         </div>
+      </div>
+    </div>
+  );
+}
+
+function ProgressStatCard({ value, label, subtext, icon, color }) {
+  const colorClasses = {
+    purple: 'bg-purple-500/10 text-purple-500',
+    blue: 'bg-blue-500/10 text-blue-500',
+    emerald: 'bg-emerald-500/10 text-emerald-500',
+    amber: 'bg-amber-500/10 text-amber-500',
+  };
+
+  return (
+    <div className="academy-card bg-surface p-5 flex items-center justify-between group hover:shadow-lg transition-all duration-500 rounded-2xl">
+      <div className="space-y-2">
+        <h3 className="text-2xl font-black text-[var(--text-main)]">{value}</h3>
+        <div>
+          <p className="text-[10px] font-black text-[var(--text-main)] opacity-60 flex items-center gap-1.5 uppercase tracking-wider">
+            {label}
+            <Info size={10} className="opacity-30" />
+          </p>
+          <p className="text-[9px] font-bold text-[var(--text-muted)] mt-0.5">{subtext}</p>
+        </div>
+      </div>
+      <div className={`w-14 h-14 rounded-[20px] flex items-center justify-center ${colorClasses[color]} group-hover:scale-105 transition-transform shadow-sm`}>
+        {icon}
       </div>
     </div>
   );
