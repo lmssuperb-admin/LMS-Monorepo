@@ -58,4 +58,12 @@ router.delete('/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+router.post('/sync-file', async (req, res) => {
+  try {
+    const { cmid, courseid, localUrl, name } = req.body;
+    const result = await moodleService.syncFileToMoodle(cmid, courseid, localUrl, name);
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

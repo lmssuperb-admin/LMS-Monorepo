@@ -307,9 +307,23 @@ export default function MasterAdminConsole() {
                
                if (actRes.error) {
                   console.error(`❌ Failed to add activity ${act.name}:`, actRes.error);
-                  // Optional: alert user but continue? Or stop?
                } else {
-                  console.log(`✅ Activity ${act.name} added successfully`);
+                  console.log(`✅ Activity ${act.name} added successfully (ID: ${actRes.id})`);
+                  
+                  // 📄 If it's a PDF activity with a local upload, sync it to Moodle!
+                  if (act.type === 'pdf' && act.pdfUrl && act.pdfUrl.includes('uploads/')) {
+                     console.log(`🔄 Syncing PDF for activity ${actRes.id} to Moodle...`);
+                     await fetch(`http://localhost:4000/api/courses/sync-file`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                           cmid: actRes.id,
+                           courseid: course.id,
+                           localUrl: act.pdfUrl,
+                           name: act.name
+                        })
+                     }).then(r => r.json());
+                  }
                }
             }
          }

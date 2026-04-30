@@ -216,11 +216,29 @@ export default function CourseAcademyPlayer() {
                               
                               {/* The PDF Content */}
                               <div className="flex-grow overflow-hidden">
-                                 <iframe 
-                                    src={activeModule.url || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"} 
-                                    className="w-full h-full border-none"
-                                    title="PDF Viewer"
-                                 />
+                                 {(() => {
+                                    const moodleToken = localStorage.getItem('moodle_token') || '6219356d21396a8682054c7d0ccf825e';
+                                    let pdfUrl = activeModule.url;
+                                    
+                                    // If it's a Moodle resource, it likely has a contents array
+                                    if (activeModule.contents && activeModule.contents[0]) {
+                                       pdfUrl = activeModule.contents[0].fileurl;
+                                    }
+
+                                    // Append token if it's a Moodle pluginfile URL
+                                    if (pdfUrl && pdfUrl.includes('pluginfile.php')) {
+                                       const separator = pdfUrl.includes('?') ? '&' : '?';
+                                       pdfUrl = `${pdfUrl}${separator}token=${moodleToken}`;
+                                    }
+
+                                    return (
+                                       <iframe 
+                                          src={pdfUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"} 
+                                          className="w-full h-full border-none"
+                                          title="PDF Viewer"
+                                       />
+                                    );
+                                 })()}
                               </div>
                            </div>
                         </div>
