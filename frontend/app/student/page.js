@@ -19,7 +19,8 @@ import {
   Target,
   ChevronRightSquare,
   ArrowUpRight,
-  Loader2
+  Loader2,
+  Sparkles
 } from 'lucide-react';
 
 export default function StudentDashboard() {
@@ -107,6 +108,26 @@ export default function StudentDashboard() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* ── CODE EDITOR CTA ── */}
+      <div 
+        onClick={() => router.push('/code_editor')}
+        className="bg-gradient-to-r from-primary/10 to-purple-600/10 border border-primary/20 rounded-[40px] p-10 flex items-center justify-between overflow-hidden relative cursor-pointer hover:border-primary/40 transition-all group shadow-xl"
+      >
+        <div className="absolute -right-10 -bottom-10 opacity-10 group-hover:scale-110 transition-transform">
+          <Brain size={260} />
+        </div>
+        <div className="relative z-10 max-w-xl">
+          <span className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-[10px] mb-4">
+            <Sparkles size={14} /> New Feature
+          </span>
+          <h2 className="text-3xl font-black text-[var(--text-main)] mb-4 leading-tight italic uppercase">AI Integrated Code Editor</h2>
+          <p className="text-[var(--text-muted)] text-sm mb-8 leading-relaxed font-bold">Solve challenges, hunt bugs, and master programming with our AI-powered coding platform.</p>
+          <button className="bg-primary text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/30 group-hover:scale-105 transition-all">
+            Launch Editor
+          </button>
         </div>
       </div>
 

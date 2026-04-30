@@ -1,0 +1,103 @@
+/* ── Code Editor Premium IDE Styling (Next-Gen AI) ── */
+
+.editor-cover {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  gap: 1px;
+  background: var(--glass-border);
+  border-radius: 32px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-xl);
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+@media (max-width: 1280px) {
+  .editor-cover {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 280px;
+  }
+  
+  .editor-output {
+    border-left: none !important;
+    border-top: 1px solid var(--glass-border);
+  }
+}
+
+.editor-code {
+  background: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.e-title {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: #252526;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  flex-shrink: 0;
+}
+
+.editor-output {
+  background: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--glass-border);
+  flex: 1;
+  min-height: 0;
+}
+
+.output-display {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  font-family: 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-height: 0;
+}
+
+.output-line {
+  color: var(--text-main);
+  border-left: 2px solid rgba(255, 255, 255, 0.1);
+  padding-left: 12px;
+  margin-bottom: 4px;
+}
+
+.output-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  text-align: center;
+  opacity: 0.3;
+}
+
+/* ── Animation ── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* ── Monaco Editor Overrides ── */
+.monaco-editor {
+  padding-top: 10px;
+}
