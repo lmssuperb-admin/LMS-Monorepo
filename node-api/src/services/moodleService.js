@@ -273,6 +273,35 @@ class MoodleService {
     });
   }
 
+  async syncVideoToMoodle(cmid, courseid, localUrl, name) {
+    const fs = require('fs');
+    const path = require('path');
+    const FormData = require('form-data');
+    
+    const fileName = localUrl.split('/').pop();
+    const filePath = path.join(__dirname, '../../uploads', fileName);
+
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Local file not found: ${filePath}`);
+    }
+
+    const form = new FormData();
+    form.append('action', 'uploadVideo');
+    form.append('cmid', cmid);
+    form.append('courseid', courseid);
+    form.append('video', fs.createReadStream(filePath));
+
+    try {
+      const response = await axios.post(`${this.baseUrl}/lms_api.php`, form, {
+        headers: form.getHeaders()
+      });
+      return response.data;
+    } catch (err) {
+      console.error(`❌ Video sync to Moodle failed:`, err.message);
+      throw err;
+    }
+  }
+
   async getAssignments(params = {}) {
     // This is a custom bridge call or a complex Moodle query
     // For now, return empty or try to resolve via bridge if we have a handler

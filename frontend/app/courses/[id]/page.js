@@ -61,8 +61,13 @@ export default function CourseAcademyPlayer() {
         ).map(m => {
           // 📄 Smart PDF Detection: If a URL activity points to a PDF, treat it as a resource
           const url = m.externalurl || m.url || '';
-          if (m.modname === 'url' && (url.toLowerCase().endsWith('.pdf') || url.includes('pluginfile.php'))) {
+          const lowUrl = url.toLowerCase();
+          if (m.modname === 'url' && (lowUrl.endsWith('.pdf') || lowUrl.includes('pluginfile.php'))) {
              return { ...m, modname: 'resource', isDetectedPdf: true };
+          }
+          // 🎥 Smart Video Detection: If a URL activity points to a video, treat it as a video
+          if (m.modname === 'url' && (lowUrl.endsWith('.mp4') || lowUrl.endsWith('.mov') || lowUrl.endsWith('.webm'))) {
+             return { ...m, modname: 'video', isDetectedVideo: true };
           }
           return m;
         })
@@ -207,55 +212,72 @@ export default function CourseAcademyPlayer() {
                      </div>
                   </div>
 
-                  {/* Content Display (PDF Viewer) */}
+                  {/* Content Display (PDF/Video Viewer) */}
                   <div className="academy-card bg-surface rounded-[24px] border-glass-border overflow-hidden shadow-xl min-h-[800px] flex flex-col">
-                     {activeModule.modname === 'resource' || activeModule.modname === 'lesson' ? (
+                     {activeModule.modname === 'resource' || activeModule.modname === 'lesson' || activeModule.modname === 'video' ? (
                         <div className="flex-grow relative bg-slate-100 dark:bg-slate-900/50">
                            <div className="absolute inset-0 flex flex-col">
-                              {/* PDF Toolbar Mock */}
-                              <div className="bg-white dark:bg-slate-800 border-b border-glass-border p-3 flex items-center justify-between shadow-sm z-10">
-                                 <div className="flex items-center gap-4">
-                                    <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                                       <BookOpen size={16} />
-                                    </div>
-                                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">{activeModule.name}</span>
-                                 </div>
-                                 <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
-                                    <span className="px-3 py-1 bg-slate-100 dark:bg-slate-700 rounded-md">1 / 1</span>
-                                    <div className="flex items-center gap-1 border-x border-glass-border px-4">
-                                       <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all"><ChevronLeft size={14} /></button>
-                                       <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all rotate-180"><ChevronLeft size={14} /></button>
-                                    </div>
-                                    <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all"><Layers size={14} /></button>
-                                 </div>
-                              </div>
-                              
-                              {/* The PDF Content */}
-                              <div className="flex-grow overflow-hidden">
-                                 {(() => {
-                                    const moodleToken = localStorage.getItem('moodle_token') || '6219356d21396a8682054c7d0ccf825e';
-                                     let pdfUrl = activeModule.externalurl || activeModule.url;
+                               {/* Media Toolbar Mock */}
+                               <div className="bg-white dark:bg-slate-800 border-b border-glass-border p-3 flex items-center justify-between shadow-sm z-10">
+                                  <div className="flex items-center gap-4">
+                                     <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                        {activeModule.modname === 'video' ? <Video size={16} /> : <BookOpen size={16} />}
+                                     </div>
+                                     <span className="text-xs font-black text-slate-700 dark:text-slate-200">{activeModule.name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
+                                     {activeModule.modname === 'video' ? (
+                                        <span className="px-3 py-1 bg-slate-100 dark:bg-slate-700 rounded-md uppercase tracking-widest text-[9px]">Live Video</span>
+                                     ) : (
+                                        <>
+                                           <span className="px-3 py-1 bg-slate-100 dark:bg-slate-700 rounded-md">1 / 1</span>
+                                           <div className="flex items-center gap-1 border-x border-glass-border px-4">
+                                              <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all"><ChevronLeft size={14} /></button>
+                                              <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all rotate-180"><ChevronLeft size={14} /></button>
+                                           </div>
+                                        </>
+                                     )}
+                                     <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-all"><Layers size={14} /></button>
+                                  </div>
+                               </div>
+                               
+                               {/* The Content */}
+                               <div className="flex-grow overflow-hidden flex items-center justify-center">
+                                  {(() => {
+                                     const moodleToken = localStorage.getItem('moodle_token') || '6219356d21396a8682054c7d0ccf825e';
+                                     let mediaUrl = activeModule.externalurl || activeModule.url;
                                      
-                                     // If it's a Moodle resource, it likely has a contents array
                                      if (activeModule.contents && activeModule.contents[0]) {
-                                        pdfUrl = activeModule.contents[0].fileurl;
+                                        mediaUrl = activeModule.contents[0].fileurl;
                                      }
 
-                                     // Append token if it's a Moodle pluginfile URL
-                                     if (pdfUrl && pdfUrl.includes('pluginfile.php')) {
-                                        const separator = pdfUrl.includes('?') ? '&' : '?';
-                                        pdfUrl = `${pdfUrl}${separator}token=${moodleToken}`;
+                                     if (mediaUrl && mediaUrl.includes('pluginfile.php')) {
+                                        const separator = mediaUrl.includes('?') ? '&' : '?';
+                                        mediaUrl = `${mediaUrl}${separator}token=${moodleToken}`;
                                      }
 
-                                    return (
-                                       <iframe 
-                                          src={pdfUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"} 
-                                          className="w-full h-full border-none"
-                                          title="PDF Viewer"
-                                       />
-                                    );
-                                 })()}
-                              </div>
+                                     if (activeModule.modname === 'video' || (mediaUrl && (mediaUrl.toLowerCase().endsWith('.mp4') || mediaUrl.toLowerCase().endsWith('.mov')))) {
+                                        return (
+                                           <div className="w-full h-full bg-black flex items-center justify-center">
+                                              <video 
+                                                 src={mediaUrl} 
+                                                 controls 
+                                                 className="max-w-full max-h-full shadow-2xl"
+                                                 autoPlay
+                                              />
+                                           </div>
+                                        );
+                                     }
+
+                                     return (
+                                        <iframe 
+                                           src={mediaUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"} 
+                                           className="w-full h-full border-none"
+                                           title="Media Viewer"
+                                        />
+                                     );
+                                  })()}
+                               </div>
                            </div>
                         </div>
                      ) : (

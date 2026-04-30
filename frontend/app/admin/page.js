@@ -320,7 +320,24 @@ export default function MasterAdminConsole() {
                            cmid: actRes.id,
                            courseid: course.id,
                            localUrl: act.pdfUrl,
-                           name: act.name
+                           name: act.name,
+                           type: 'pdf'
+                        })
+                     }).then(r => r.json());
+                  }
+
+                  // 🎥 If it's a Video activity with a local upload, sync it to Moodle!
+                  if (act.type === 'video' && act.videoUrl && act.videoUrl.includes('uploads/')) {
+                     console.log(`🔄 Syncing Video for activity ${actRes.id} to Moodle...`);
+                     await fetch(`http://localhost:4000/api/courses/sync-file`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                           cmid: actRes.id,
+                           courseid: course.id,
+                           localUrl: act.videoUrl,
+                           name: act.name,
+                           type: 'video'
                         })
                      }).then(r => r.json());
                   }

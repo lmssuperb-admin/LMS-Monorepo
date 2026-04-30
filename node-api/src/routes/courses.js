@@ -60,8 +60,13 @@ router.delete('/:id', async (req, res) => {
 
 router.post('/sync-file', async (req, res) => {
   try {
-    const { cmid, courseid, localUrl, name } = req.body;
-    const result = await moodleService.syncFileToMoodle(cmid, courseid, localUrl, name);
+    const { cmid, courseid, localUrl, name, type } = req.body;
+    let result;
+    if (type === 'video' || (localUrl && (localUrl.endsWith('.mp4') || localUrl.endsWith('.mov')))) {
+       result = await moodleService.syncVideoToMoodle(cmid, courseid, localUrl, name);
+    } else {
+       result = await moodleService.syncFileToMoodle(cmid, courseid, localUrl, name);
+    }
     res.json(result);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
