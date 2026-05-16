@@ -27,6 +27,8 @@ export default function CourseAcademyPlayer() {
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeModule, setActiveModule] = useState(null);
+  const [learningPaths, setLearningPaths] = useState([]);
+  const [activePath, setActivePath] = useState(null);
 
   const STATIC_POSH_CURRICULUM = [
     {
@@ -45,7 +47,20 @@ export default function CourseAcademyPlayer() {
 
   useEffect(() => {
     fetchCourseDetails();
+    fetchLearningPaths();
   }, [id]);
+
+  const fetchLearningPaths = async () => {
+    try {
+      const res = await fetch('http://localhost:4000/api/learningpaths');
+      const paths = await res.json();
+      setLearningPaths(paths);
+      
+      // Find if this course is part of any path
+      const path = paths.find(p => p.courses?.includes(id));
+      if (path) setActivePath(path);
+    } catch (err) { console.error('Failed to fetch learning paths', err); }
+  };
 
   const fetchCourseDetails = async () => {
     try {
@@ -186,6 +201,46 @@ export default function CourseAcademyPlayer() {
                   ))}
                </div>
             </div>
+
+            {/* ── LEARNING PATH SIDEBAR MODULE ── */}
+            {activePath && (
+               <div className="academy-card bg-surface overflow-hidden rounded-[20px] border-glass-border mt-6 shadow-lg animate-in slide-in-from-left-4 duration-700">
+                  <div className="p-5 border-b border-glass-border bg-primary/5">
+                     <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-primary text-white">
+                           <Layers size={16} />
+                        </div>
+                        <div>
+                           <h4 className="text-xs font-black text-[var(--text-main)] uppercase tracking-tight">Learning Path</h4>
+                           <p className="text-[9px] font-bold text-primary uppercase tracking-widest">{activePath.name}</p>
+                        </div>
+                     </div>
+                  </div>
+                  <div className="p-3 space-y-1">
+                     {activePath.courses?.map((pathCourseId, idx) => {
+                        const isCurrent = pathCourseId === id;
+                        // Since we don't have all course names, we'll just show the IDs for now or fetch them if needed
+                        // But in a real app, we'd have course titles. 
+                        // For now let's use a placeholder if it's not the current one.
+                        return (
+                           <div 
+                              key={pathCourseId}
+                              onClick={() => !isCurrent && router.push(`/courses/${pathCourseId}`)}
+                              className={`flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer ${isCurrent ? 'bg-primary/10 border border-primary/20' : 'hover:bg-surface-hover opacity-60 hover:opacity-100'}`}
+                           >
+                              <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black ${isCurrent ? 'bg-primary text-white' : 'bg-background text-muted'}`}>
+                                 {idx + 1}
+                              </div>
+                              <span className={`text-[10px] font-bold ${isCurrent ? 'text-primary' : 'text-[var(--text-main)]'}`}>
+                                 {isCurrent ? course.fullname : `Course ${pathCourseId}`}
+                              </span>
+                              {isCurrent && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />}
+                           </div>
+                        );
+                     })}
+                  </div>
+               </div>
+            )}
          </div>
 
          {/* ── RIGHT COLUMN: MAIN CONTENT ── */}

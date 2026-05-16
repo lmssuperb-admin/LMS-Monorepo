@@ -1,12 +1,15 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import {
    Users, BookOpen, ShieldCheck, Search, Plus, Activity, Loader2,
    MoreVertical, Edit2, X, ChevronLeft, ChevronRight, Filter, Globe, Database,
    UserPlus, Mail, MapPin, Key, Lock, CheckSquare, Square, ChevronDown,
    Info, Camera, PlusCircle, Tag, Phone, Home, Building, LayoutGrid, ScrollText,
-   Building2, Smartphone, Type, List, Link, Image, Video, UploadCloud, ChevronUp, FilePlus, Sparkles, Play, FileText, BrainCircuit, PenTool, HelpCircle, FolderOpen, Check, LayoutDashboard, Bell, Calendar, TrendingUp, Award, Clock, ArrowRight, MessageSquare, ExternalLink, Sliders
+   Building2, Smartphone, Type, List, Link, Image, Video, UploadCloud, ChevronUp, FilePlus, Sparkles, Play, FileText, BrainCircuit, PenTool, HelpCircle, FolderOpen, Check, LayoutDashboard, Bell, Calendar, TrendingUp, Clock, ArrowRight, MessageSquare, ExternalLink, Sliders,
+   Bold, Italic, ListOrdered, Undo, Scissors, FileImage, Mic, Webcam, Accessibility, AlertCircle,
+   BellRing, GraduationCap, Rocket
 } from 'lucide-react';
+import { Layers } from 'lucide-react';
 
 function formatRelativeTime(seconds) {
    if (!seconds || seconds === 0) return 'Never logged in';
@@ -23,7 +26,7 @@ export default function MasterAdminConsole() {
    const [mainTab, setMainTab] = useState('dashboard');
    const [subTab, setSubTab] = useState('Overview');
    const [data, setData] = useState({
-      users: [], courses: [], categories: [], cohorts: [], roles: [], systemAssignments: [],
+      users: [], courses: [], categories: [], cohorts: [], roles: [], systemAssignments: [], learningpaths: [],
       announcements: [
          { id: 1, title: 'Launch Of New Semester', author: 'Admin User', date: '2026-04-27T10:24', icon: <Bell size={18} /> },
          { id: 2, title: 'General Notification', author: 'Admin User', date: '2026-04-27T08:27', icon: <Bell size={18} /> },
@@ -45,9 +48,35 @@ export default function MasterAdminConsole() {
    const activityFileInputRef = useRef(null);
    const posterImageInputRef = useRef(null);
    const [searchQuery, setSearchQuery] = useState('');
-   const [activeFilters, setActiveFilters] = useState(['name', 'email']);
    const [filterByRole, setFilterByRole] = useState('all');
-   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+   const [activeFilters, setActiveFilters] = useState(['name', 'email']);
+   const [learningPaths, setLearningPaths] = useState([]);
+   const [editingPath, setEditingPath] = useState(null);
+   const [newPathForm, setNewPathForm] = useState({ 
+      name: '', 
+      description: '',
+      credits: '0',
+      startDate: '',
+      endDate: '',
+      enableStart: false,
+      enableEnd: false,
+      selfEnrollment: false,
+      location: '',
+      instructor: '',
+      image: null,
+      certificate: null
+   });
+   const [showPathModal, setShowPathModal] = useState(false);
+   const [pathStep, setPathStep] = useState(1);
+   const [pathSubTab, setPathSubTab] = useState('Overview');
+   const [pathSuccess, setPathSuccess] = useState(false);
+   const [isAddingCourses, setIsAddingCourses] = useState(false);
+   const [isAddingUsers, setIsAddingUsers] = useState(false);
+   const [isAddingCohorts, setIsAddingCohorts] = useState(false);
+    const [selectedPathCourses, setSelectedPathCourses] = useState([]);
+    const [selectedPathUsers, setSelectedPathUsers] = useState([]);
+    const [selectedPathCohorts, setSelectedPathCohorts] = useState([]);
+    const [showFilterDropdown, setShowFilterDropdown] = useState(false);
    const [currentPage, setCurrentPage] = useState(1);
    const [itemsPerPage, setItemsPerPage] = useState(10);
    const [roleForm, setRoleForm] = useState({ userid: '', roleid: '', contextlevel: 'system', instanceid: 0 });
@@ -152,14 +181,14 @@ export default function MasterAdminConsole() {
    const paginatedUsers = filteredUsers?.slice(startIndex, startIndex + itemsPerPage);
 
    const fetchTabData = async () => {
-      // 🧠 Abort previous fetch if still running
+      // ðŸ§  Abort previous fetch if still running
       if (window.fetchController) window.fetchController.abort();
       window.fetchController = new AbortController();
       const { signal } = window.fetchController;
 
       setLoading(true);
       try {
-         // 🏠 Dashboard Data Fetching (Real Data aggregation)
+         // ðŸ  Dashboard Data Fetching (Real Data aggregation)
          if (mainTab === 'dashboard') {
             const [usersRes, coursesRes, eventsRes] = await Promise.all([
                fetch(`http://localhost:4000/api/users`, { signal }).then(r => r.json()),
@@ -188,8 +217,16 @@ export default function MasterAdminConsole() {
          if (subTab === 'Browse users') endpoint = 'users';
          else if (subTab === 'Manage courses' || subTab === 'Add course') endpoint = 'courses';
          else if (subTab === 'Define roles' || subTab === 'Assign system roles') endpoint = 'roles';
+         else if (subTab === 'Learning Paths' || subTab === 'Add Path') {
+            endpoint = 'learningpaths';
+            // Also need courses for selection if adding path
+            if (subTab === 'Add Path') {
+               const cRes = await fetch(`http://localhost:4000/api/courses`, { signal }).then(r => r.json());
+               setData(prev => ({ ...prev, courses: Array.isArray(cRes) ? cRes : (cRes.courses || []) }));
+            }
+         }
 
-         // 🔄 Ensure users and their roles are fetched for enrollment step in Add Course
+         // ðŸ”„ Ensure users and their roles are fetched for enrollment step in Add Course
          if (subTab === 'Add course') {
             const [userRes, assignRes] = await Promise.all([
                fetch(`http://localhost:4000/api/users`, { signal }).then(r => r.json()),
@@ -202,10 +239,10 @@ export default function MasterAdminConsole() {
             }));
          }
 
-         // 🔄 Main Endpoint Fetch
+         // ðŸ”„ Main Endpoint Fetch
          if (endpoint) {
             const res = await fetch(`http://localhost:4000/api/${endpoint}`, { signal }).then(r => r.json());
-            let actualData = Array.isArray(res) ? res : (res.users || res.courses || res.roles || []);
+            let actualData = Array.isArray(res) ? res : (res.users || res.courses || res.roles || res.learningpaths || []);
             setData(prev => ({ ...prev, [endpoint]: actualData }));
          }
 
@@ -215,7 +252,7 @@ export default function MasterAdminConsole() {
             setData(prev => ({ ...prev, categories: Array.isArray(cats) ? cats : [] }));
          }
 
-         // 🔐 Global Assignments Persistence Sync
+         // ðŸ” Global Assignments Persistence Sync
          if (mainTab === 'permissions' || subTab === 'Assign system roles') {
             const [usersRes, assignRes] = await Promise.all([
                fetch(`http://localhost:4000/api/users`, { signal }).then(r => r.json()),
@@ -293,12 +330,12 @@ export default function MasterAdminConsole() {
          if (course.error) throw new Error(course.error);
 
          // 2. Add Activities
-         console.log(`📚 Adding ${courseTopics.reduce((acc, t) => acc + t.activities.length, 0)} activities to course ${course.id}`);
+         console.log(`ðŸ“š Adding ${courseTopics.reduce((acc, t) => acc + t.activities.length, 0)} activities to course ${course.id}`);
          
          for (let i = 0; i < courseTopics.length; i++) {
             const topic = courseTopics[i];
             for (const act of topic.activities) {
-               console.log(`📡 Posting activity: ${act.name} to section ${i}`);
+               console.log(`ðŸ“¡ Posting activity: ${act.name} to section ${i}`);
                const actRes = await fetch(`http://localhost:4000/api/courses/${course.id}/activities`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -306,13 +343,13 @@ export default function MasterAdminConsole() {
                }).then(r => r.json());
                
                if (actRes.error) {
-                  console.error(`❌ Failed to add activity ${act.name}:`, actRes.error);
+                  console.error(`âŒ Failed to add activity ${act.name}:`, actRes.error);
                } else {
-                  console.log(`✅ Activity ${act.name} added successfully (ID: ${actRes.id})`);
+                  console.log(`âœ… Activity ${act.name} added successfully (ID: ${actRes.id})`);
                   
-                  // 📄 If it's a PDF activity with a local upload, sync it to Moodle!
+                  // ðŸ“„ If it's a PDF activity with a local upload, sync it to Moodle!
                   if (act.type === 'pdf' && act.pdfUrl && act.pdfUrl.includes('uploads/')) {
-                     console.log(`🔄 Syncing PDF for activity ${actRes.id} to Moodle...`);
+                     console.log(`ðŸ”„ Syncing PDF for activity ${actRes.id} to Moodle...`);
                      await fetch(`http://localhost:4000/api/courses/sync-file`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -326,9 +363,9 @@ export default function MasterAdminConsole() {
                      }).then(r => r.json());
                   }
 
-                  // 🎥 If it's a Video activity with a local upload, sync it to Moodle!
+                  // ðŸŽ¥ If it's a Video activity with a local upload, sync it to Moodle!
                   if (act.type === 'video' && act.videoUrl && act.videoUrl.includes('uploads/')) {
-                     console.log(`🔄 Syncing Video for activity ${actRes.id} to Moodle...`);
+                     console.log(`ðŸ”„ Syncing Video for activity ${actRes.id} to Moodle...`);
                      await fetch(`http://localhost:4000/api/courses/sync-file`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -413,6 +450,7 @@ export default function MasterAdminConsole() {
       setLoading(false);
    };
 
+
    const handleDeleteCourse = async (id) => {
       if (!confirm('Are you sure you want to delete this course?')) return;
       setLoading(true);
@@ -424,6 +462,42 @@ export default function MasterAdminConsole() {
       } catch (err) {
          alert("Deletion failed: " + err.message);
       }
+      setLoading(false);
+   };
+
+   const handleDeletePath = async (id) => {
+      if (!confirm('Are you sure you want to delete this learning path?')) return;
+      setLoading(true);
+      try {
+         const res = await fetch(`http://localhost:4000/api/learningpaths/${id}`, { method: 'DELETE' }).then(r => r.json());
+         if (res.error) throw new Error(res.error);
+         alert('Path Deleted Successfully!');
+         fetchTabData();
+      } catch (err) { alert("Deletion failed: " + err.message); }
+      setLoading(false);
+   };
+
+   const handleCreatePath = async () => {
+      if (!newPathForm.name) return alert("Please enter path name");
+      setLoading(true);
+      try {
+         const url = editingPath ? `http://localhost:4000/api/learningpaths/${editingPath.id}` : 'http://localhost:4000/api/learningpaths';
+         const method = editingPath ? 'PUT' : 'POST';
+         
+         const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...newPathForm, courses: selectedPathCourses })
+         }).then(r => r.json());
+         
+         if (res.error) throw new Error(res.error);
+         
+         setPathSuccess(true);
+         // Stay in Add Path subtab and move to Step 2 (Management View)
+         setPathStep(2);
+         setPathSubTab('Overview');
+         fetchTabData();
+      } catch (err) { alert(`Failed to ${editingPath ? 'update' : 'create'} path: ` + err.message); }
       setLoading(false);
    };
 
@@ -538,10 +612,11 @@ export default function MasterAdminConsole() {
    };
 
    const menuItems = {
-      dashboard: { icon: <LayoutDashboard size={18} />, subs: ['Overview'] },
-      users: { icon: <Users size={18} />, subs: ['Browse users', 'Add user'] },
-      courses: { icon: <BookOpen size={18} />, subs: ['Manage courses', 'Categories', 'Add course'] },
-      permissions: { icon: <ShieldCheck size={18} />, subs: ['Define roles', 'Assign system roles'] },
+      dashboard: { label: 'Dashboard', icon: <LayoutDashboard size={18} />, subs: ['Overview'] },
+      users: { label: 'User Management', icon: <Users size={18} />, subs: ['Browse users', 'Add user'] },
+      courses: { label: 'Course Library', icon: <BookOpen size={18} />, subs: ['Manage courses', 'Categories', 'Add course'] },
+      permissions: { label: 'System Roles', icon: <ShieldCheck size={18} />, subs: ['Define roles', 'Assign system roles'] },
+      learningPaths: { label: 'Learning Paths', icon: <MapPin size={18} />, subs: ['Learning Paths', 'Add Path'] },
    };
 
    return (
@@ -555,7 +630,7 @@ export default function MasterAdminConsole() {
             <nav className="flex-grow p-4 space-y-1.5">
                {Object.entries(menuItems).map(([key, item]) => (
                   <div key={key}>
-                     <button onClick={() => { setMainTab(key); setSubTab(item.subs[0]); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-black uppercase text-[10px] tracking-widest ${mainTab === key ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted hover:bg-surface-hover'}`}>{item.icon} {key}</button>
+                     <button onClick={() => { setMainTab(key); setSubTab(item.subs[0]); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-black uppercase text-[10px] tracking-widest ${mainTab === key ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted hover:bg-surface-hover'}`}>{item.icon} {item.label}</button>
                      {mainTab === key && (
                         <div className="ml-8 mt-1 space-y-0.5 py-1 border-l-2 border-primary/20 animate-in slide-in-from-left-1 duration-300">
                            {item.subs.map(sub => (<button key={sub} onClick={() => { setSubTab(sub); if (sub === 'Add user') setShowModal('Add User'); }} className={`w-full text-left px-5 py-2 text-[10px] font-bold tracking-tight transition-all ${subTab === sub ? 'text-primary' : 'text-muted hover:text-main'}`}>{sub}</button>))}
@@ -579,8 +654,8 @@ export default function MasterAdminConsole() {
                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <StatCard icon={<Users size={20} />} label="Total Users" value={data.users.length} sub="Active Now" />
                         <StatCard icon={<Activity size={20} />} label="Active Users" value={data.users.filter(u => u.lastaccess > (Date.now() / 1000 - 86400)).length} sub="Past 24h" />
+                        <StatCard icon={<MapPin size={20} />} label="Learning Paths" value={data.learningpaths?.length || 0} sub="Active Paths" />
                         <StatCard icon={<BookOpen size={20} />} label="Total Courses" value={data.courses.length} sub="Published" />
-                        <StatCard icon={<Award size={20} />} label="Certificates Issued" value={14} sub="Completed" />
                      </div>
 
                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -1101,10 +1176,940 @@ export default function MasterAdminConsole() {
                   </div>
                )}
 
-               {subTab === 'Define roles' && (
-                  <div className="space-y-8 animate-in fade-in duration-500">
-                     <div className="academy-card overflow-hidden">
-                        <table className="w-full text-left border-collapse">
+                               {subTab === 'Learning Paths' && (
+                   <div className="space-y-6 animate-in fade-in duration-500">
+                      <div className="flex justify-between items-center bg-surface/60 p-6 rounded-3xl border border-glass-border shadow-sm mb-8">
+                         <div>
+                            <h3 className="text-xl font-black italic uppercase tracking-tight text-main">Learning Paths</h3>
+                            <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1">Design and manage custom learning journeys for students</p>
+                         </div>
+                         <button 
+                            onClick={() => { 
+                               setSubTab('Add Path'); 
+                               setPathStep(1); 
+                               setEditingPath(null); 
+                               setNewPathForm({ 
+                                  name: '', 
+                                  description: '',
+                                  credits: '0',
+                                  startDate: '',
+                                  endDate: '',
+                                  enableStart: false,
+                                  enableEnd: false,
+                                  selfEnrollment: false,
+                                  location: '',
+                                  instructor: '',
+                                  image: null,
+                                  certificate: null
+                               });
+                               setSelectedPathCourses([]);
+                            }} 
+                            className="bg-primary text-white px-8 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md hover:shadow-lg transition-all flex items-center gap-3"
+                         >
+                            <Plus size={16} /> Create New Path
+                         </button>
+                      </div>
+
+                      <div className="academy-card overflow-hidden text-[11px]">
+                         <table className="w-full text-left border-collapse">
+                            <thead>
+                               <tr className="border-b border-glass-border bg-white/5 uppercase text-[9px] font-black tracking-[0.2em] text-primary/60">
+                                  <th className="p-6">Path Identity</th>
+                                  <th className="p-6">Curriculum</th>
+                                  <th className="p-6">Created At</th>
+                                  <th className="p-6 text-right">Actions</th>
+                               </tr>
+                            </thead>
+                            <tbody className="divide-y divide-glass-border text-xs font-bold">
+                               {data.learningpaths?.map(lp => (
+                                  <tr key={lp.id} className="hover:bg-white/5 transition-colors group">
+                                     <td className="p-6">
+                                        <div className="flex items-center gap-4">
+                                           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                                              <MapPin size={20} />
+                                           </div>
+                                           <div className="flex flex-col">
+                                              <span className="text-main uppercase tracking-tighter text-sm">{lp.name}</span>
+                                              <span className="text-muted text-[10px] font-medium line-clamp-1 max-w-xs">{lp.description || 'No description provided'}</span>
+                                           </div>
+                                        </div>
+                                     </td>
+                                     <td className="p-6">
+                                        <div className="flex items-center gap-2">
+                                           <span className="px-3 py-1 bg-surface border border-glass-border rounded-full text-[9px] uppercase text-primary font-black">
+                                              {lp.courses?.length || 0} Courses
+                                           </span>
+                                        </div>
+                                     </td>
+                                     <td className="p-6 text-muted font-medium uppercase tracking-widest text-[9px]">
+                                        {lp.createdAt ? new Date(lp.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                     </td>
+                                     <td className="p-6 text-right">
+                                        <div className="flex justify-end gap-2">
+                                           <button 
+                                              onClick={() => {
+                                                 setEditingPath(lp);
+                                                 setNewPathForm({ name: lp.name, description: lp.description });
+                                                 setSelectedPathCourses(lp.courses || []);
+                                                 setSubTab('Add Path');
+                                                 setPathStep(1);
+                                              }} 
+                                              className="p-3 hover:bg-primary hover:text-white rounded-xl transition-all border border-glass-border text-muted"
+                                           >
+                                              <Edit2 size={16} />
+                                           </button>
+                                           <button 
+                                              onClick={() => handleDeletePath(lp.id)} 
+                                              className="p-3 hover:bg-red-500 hover:text-white rounded-xl transition-all border border-glass-border text-muted"
+                                           >
+                                              <X size={16} />
+                                           </button>
+                                        </div>
+                                     </td>
+                                  </tr>
+                               ))}
+                               {(!data.learningpaths || data.learningpaths.length === 0) && (
+                                  <tr>
+                                     <td colSpan={4} className="p-20 text-center text-muted uppercase text-[10px] tracking-[0.3em]">
+                                        No learning paths found in database
+                                     </td>
+                                  </tr>
+                               )}
+                            </tbody>
+                         </table>
+                      </div>
+                   </div>
+                )}
+                {subTab === 'Add Path' && (
+                   <div className="space-y-6 animate-in fade-in duration-500">
+                    <div className="max-w-4xl mx-auto space-y-12 animate-in slide-in-from-bottom-8 duration-700 pb-20">
+                       {/* Step Progress Bar */}
+                       <div className="flex items-center justify-between px-10">
+                          {[1, 2, 3].map((step) => (
+                             <Fragment key={step}>
+                                <div className="flex flex-col items-center gap-3 relative z-10">
+                                   <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg transition-all duration-500 ${pathStep >= step ? 'bg-primary text-white shadow-xl shadow-primary/30' : 'bg-surface border border-glass-border text-muted'}`}>
+                                      {pathStep > step ? <Check size={24} /> : step}
+                                   </div>
+                                   <span className={`text-[10px] font-black uppercase tracking-widest ${pathStep >= step ? 'text-primary' : 'text-muted'}`}>
+                                      {step === 1 ? 'Details' : step === 2 ? 'Courses' : 'Review'}
+                                   </span>
+                                </div>
+                                {step < 3 && <div className={`flex-grow h-1 mx-4 rounded-full transition-all duration-700 ${pathStep > step ? 'bg-primary' : 'bg-glass-border'}`} />}
+                             </Fragment>
+                          ))}
+                       </div>
+
+                       {pathStep === 1 && (
+                          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
+                             {/* Header with Back Arrow */}
+                             <div className="flex items-center gap-4 mb-12">
+                                <button onClick={() => setSubTab('Learning Paths')} className="p-3 rounded-full bg-surface-hover hover:bg-primary/10 hover:text-primary transition-all border border-glass-border shadow-sm">
+                                   <ChevronLeft size={20} />
+                                </button>
+                                <h2 className="text-2xl font-black text-main tracking-tight italic uppercase">Create A Learning Path</h2>
+                             </div>
+
+                             <div className="bg-surface border border-glass-border rounded-[32px] p-10 shadow-2xl space-y-10">
+                                {/* Basic Info */}
+                                <div className="space-y-8">
+                                   <div className="space-y-4">
+                                      <div className="flex items-center gap-2">
+                                         <label className="text-[11px] font-black uppercase text-main tracking-widest">Learning Path Name</label>
+                                         <AlertCircle size={14} className="text-red-500" />
+                                         <Info size={14} className="text-muted/40" />
+                                      </div>
+                                      <input 
+                                         type="text" 
+                                         value={newPathForm.name} 
+                                         onChange={e => setNewPathForm({ ...newPathForm, name: e.target.value })}
+                                         className="w-full h-14 bg-background/50 border border-glass-border rounded-xl px-6 text-xs font-bold focus:border-primary transition-all outline-none"
+                                         placeholder="Enter path name..."
+                                      />
+                                   </div>
+
+                                   <div className="space-y-4">
+                                      <div className="flex items-center gap-2">
+                                         <label className="text-[11px] font-black uppercase text-main tracking-widest">Credits</label>
+                                         <Info size={14} className="text-muted/40" />
+                                      </div>
+                                      <input 
+                                         type="number" 
+                                         value={newPathForm.credits} 
+                                         onChange={e => setNewPathForm({ ...newPathForm, credits: e.target.value })}
+                                         className="w-full h-14 bg-background/50 border border-glass-border rounded-xl px-6 text-xs font-bold focus:border-primary transition-all outline-none"
+                                      />
+                                   </div>
+
+                                   {/* Dates Grid */}
+                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                      <div className="space-y-4">
+                                         <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                               <label className="text-[11px] font-black uppercase text-main tracking-widest">Start Date</label>
+                                               <Info size={14} className="text-muted/40" />
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                               <input 
+                                                  type="checkbox" 
+                                                  checked={newPathForm.enableStart} 
+                                                  onChange={e => setNewPathForm({ ...newPathForm, enableStart: e.target.checked })}
+                                                  className="w-4 h-4 accent-primary" 
+                                               />
+                                               <span className="text-[10px] font-black uppercase text-main">Enable</span>
+                                            </div>
+                                         </div>
+                                         <div className="relative">
+                                            <input 
+                                               type="date" 
+                                               disabled={!newPathForm.enableStart}
+                                               value={newPathForm.startDate}
+                                               onChange={e => setNewPathForm({ ...newPathForm, startDate: e.target.value })}
+                                               className="w-full h-14 bg-background/50 border border-glass-border rounded-xl px-6 text-xs font-bold focus:border-primary transition-all outline-none disabled:opacity-30"
+                                            />
+                                            <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-primary pointer-events-none" size={18} />
+                                         </div>
+                                      </div>
+
+                                      <div className="space-y-4">
+                                         <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                               <label className="text-[11px] font-black uppercase text-main tracking-widest">End Date</label>
+                                               <Info size={14} className="text-muted/40" />
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                               <input 
+                                                  type="checkbox" 
+                                                  checked={newPathForm.enableEnd} 
+                                                  onChange={e => setNewPathForm({ ...newPathForm, enableEnd: e.target.checked })}
+                                                  className="w-4 h-4 accent-primary" 
+                                               />
+                                               <span className="text-[10px] font-black uppercase text-main">Enable</span>
+                                            </div>
+                                         </div>
+                                         <div className="relative">
+                                            <input 
+                                               type="date" 
+                                               disabled={!newPathForm.enableEnd}
+                                               value={newPathForm.endDate}
+                                               onChange={e => setNewPathForm({ ...newPathForm, endDate: e.target.value })}
+                                               className="w-full h-14 bg-background/50 border border-glass-border rounded-xl px-6 text-xs font-bold focus:border-primary transition-all outline-none disabled:opacity-30"
+                                            />
+                                            <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-primary pointer-events-none" size={18} />
+                                         </div>
+                                      </div>
+                                   </div>
+
+                                   {/* Description with Toolbar Mock */}
+                                   <div className="space-y-4">
+                                      <div className="flex items-center gap-2">
+                                         <label className="text-[11px] font-black uppercase text-main tracking-widest">Description</label>
+                                         <AlertCircle size={14} className="text-red-500" />
+                                         <Info size={14} className="text-muted/40" />
+                                      </div>
+                                      <div className="border border-glass-border rounded-2xl overflow-hidden shadow-inner">
+                                         <div className="bg-surface border-b border-glass-border p-2 flex flex-wrap gap-1">
+                                            <ToolbarBtn icon={<Undo size={14} />} />
+                                            <div className="w-px h-6 bg-glass-border mx-1" />
+                                            <ToolbarBtn icon={<Type size={14} />} dropdown />
+                                            <ToolbarBtn icon={<Bold size={14} />} />
+                                            <ToolbarBtn icon={<Italic size={14} />} />
+                                            <div className="w-px h-6 bg-glass-border mx-1" />
+                                            <ToolbarBtn icon={<List size={14} />} />
+                                            <ToolbarBtn icon={<ListOrdered size={14} />} />
+                                            <div className="w-px h-6 bg-glass-border mx-1" />
+                                            <ToolbarBtn icon={<Link size={14} />} />
+                                            <ToolbarBtn icon={<Scissors size={14} />} />
+                                            <div className="w-px h-6 bg-glass-border mx-1" />
+                                            <ToolbarBtn icon={<FileImage size={14} />} />
+                                            <ToolbarBtn icon={<Video size={14} />} />
+                                            <ToolbarBtn icon={<Mic size={14} />} />
+                                            <ToolbarBtn icon={<Webcam size={14} />} />
+                                            <ToolbarBtn icon={<Accessibility size={14} />} />
+                                         </div>
+                                         <textarea 
+                                            value={newPathForm.description}
+                                            onChange={e => setNewPathForm({ ...newPathForm, description: e.target.value })}
+                                            className="w-full h-48 bg-background/30 p-6 text-xs font-bold focus:outline-none resize-none"
+                                            placeholder="Write path description here..."
+                                         />
+                                      </div>
+                                   </div>
+
+                                   {/* Self Enrollment */}
+                                   <div className="flex items-center gap-3">
+                                      <input 
+                                         type="checkbox" 
+                                         checked={newPathForm.selfEnrollment} 
+                                         onChange={e => setNewPathForm({ ...newPathForm, selfEnrollment: e.target.checked })}
+                                         className="w-4 h-4 accent-primary" 
+                                      />
+                                      <label className="text-[11px] font-black uppercase text-main tracking-widest">Self Enrollment</label>
+                                   </div>
+
+                                   {/* Image & Certificate Uploads */}
+                                   <div className="space-y-8">
+                                      <div className="space-y-4">
+                                         <div className="flex items-center gap-2">
+                                            <label className="text-[11px] font-black uppercase text-main tracking-widest">Learning Path Image</label>
+                                            <AlertCircle size={14} className="text-red-500" />
+                                            <Info size={14} className="text-muted/40" />
+                                         </div>
+                                         <div className="border-2 border-dashed border-glass-border rounded-2xl p-12 bg-primary/5 flex flex-col items-center justify-center text-center space-y-4 group hover:border-primary/50 transition-all cursor-pointer">
+                                            <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center shadow-lg text-primary group-hover:scale-110 transition-transform">
+                                               <UploadCloud size={32} />
+                                            </div>
+                                            <div className="space-y-1">
+                                               <p className="text-[10px] font-black text-main uppercase">You can drag and drop files here to add them.</p>
+                                               <p className="text-[9px] font-bold text-muted uppercase">Recommended size: 500 x 280 px</p>
+                                            </div>
+                                            <button className="bg-primary text-white px-8 py-2.5 rounded-lg font-black text-[10px] uppercase tracking-widest shadow-md">Choose A File</button>
+                                         </div>
+                                         <div className="text-[9px] font-bold text-muted uppercase space-y-1">
+                                            <p>Accepted file types:</p>
+                                            <p>Image (JPEG)</p>
+                                            <p>Image (PNG)</p>
+                                         </div>
+                                      </div>
+
+                                      <div className="space-y-4">
+                                         <label className="text-[11px] font-black uppercase text-main tracking-widest">Upload Certificate</label>
+                                         <button className="bg-primary text-white px-8 py-2.5 rounded-lg font-black text-[10px] uppercase tracking-widest shadow-md">Choose A File</button>
+                                         <div className="border-2 border-dashed border-glass-border rounded-2xl p-12 bg-primary/5 flex flex-col items-center justify-center text-center space-y-4 group hover:border-primary/50 transition-all cursor-pointer">
+                                            <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center shadow-lg text-primary group-hover:scale-110 transition-transform">
+                                               <UploadCloud size={32} />
+                                            </div>
+                                            <div className="space-y-1">
+                                               <p className="text-[10px] font-black text-main uppercase">You can drag and drop files here to add them.</p>
+                                               <p className="text-[9px] font-bold text-muted uppercase">Recommended size: 500 x 280 px</p>
+                                            </div>
+                                         </div>
+                                         <div className="text-[9px] font-bold text-muted uppercase space-y-1">
+                                            <p>Accepted file types:</p>
+                                            <p>Image (JPEG)</p>
+                                            <p>Image (PNG)</p>
+                                         </div>
+                                      </div>
+                                   </div>
+
+                                   {/* Location & Instructor */}
+                                   <div className="space-y-8">
+                                      <div className="space-y-4">
+                                         <label className="text-[11px] font-black uppercase text-main tracking-widest">Location</label>
+                                         <input 
+                                            type="text" 
+                                            value={newPathForm.location}
+                                            onChange={e => setNewPathForm({ ...newPathForm, location: e.target.value })}
+                                            className="w-full h-14 bg-background/50 border border-glass-border rounded-xl px-6 text-xs font-bold focus:border-primary transition-all outline-none"
+                                            placeholder="Enter location..."
+                                         />
+                                      </div>
+
+                                      <div className="space-y-4">
+                                         <label className="text-[11px] font-black uppercase text-main tracking-widest">Instructor</label>
+                                         <div className="relative">
+                                            <select 
+                                               value={newPathForm.instructor}
+                                               onChange={e => setNewPathForm({ ...newPathForm, instructor: e.target.value })}
+                                               className="w-full h-14 bg-background/50 border border-glass-border rounded-xl px-6 text-xs font-bold focus:border-primary transition-all outline-none appearance-none"
+                                            >
+                                               <option value="">Select Instructor</option>
+                                               <option value="1">Admin User</option>
+                                            </select>
+                                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-muted pointer-events-none" size={16} />
+                                         </div>
+                                      </div>
+                                   </div>
+                                </div>
+
+                                <div className="flex justify-center gap-4 pt-10 border-t border-glass-border">
+                                   <button onClick={() => handleCreatePath()} className="px-12 py-5 bg-primary text-white rounded-3xl font-black text-xs uppercase tracking-[0.3em] shadow-2xl hover:scale-105 transition-all">Save Changes</button>
+                                   <button onClick={() => setSubTab('Learning Paths')} className="px-12 py-5 bg-surface border border-glass-border text-muted rounded-3xl font-black text-xs uppercase tracking-[0.3em] hover:bg-surface-hover transition-all">Cancel</button>
+                                </div>
+                             </div>
+
+                             {/* Step 2 Trigger (Temporary until real flow is decided) */}
+                             <div className="flex justify-end mt-4">
+                                <button onClick={() => setPathStep(2)} className="text-[10px] font-black uppercase text-primary hover:underline flex items-center gap-2">Next Step: Select Courses <ChevronRight size={14} /></button>
+                             </div>
+                          </div>
+                       )}
+
+                       {pathStep === 2 && (
+                          <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-700 pb-20">
+                             {/* Success Banner Mock */}
+                             {pathSuccess && (
+                                <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 flex items-center justify-between animate-in fade-in slide-in-from-top-4 duration-500">
+                                   <div className="flex items-center gap-3 text-green-600 font-bold text-xs">
+                                      <Check size={16} /> Changes saved
+                                   </div>
+                                   <button onClick={() => setPathSuccess(false)} className="text-green-600/50 hover:text-green-600 transition-colors"><X size={14} /></button>
+                                </div>
+                             )}
+
+                             {/* Header */}
+                             <div className="flex items-center gap-4">
+                                <button onClick={() => setPathStep(1)} className="p-2.5 rounded-full bg-surface-hover hover:bg-primary/10 hover:text-primary transition-all border border-glass-border">
+                                   <ChevronLeft size={18} />
+                                </button>
+                                <h2 className="text-xl font-black text-main tracking-tight uppercase italic">{newPathForm.name || 'Testing'}</h2>
+                             </div>
+
+                             {/* Tabs */}
+                             <div className="flex items-center gap-2 border-b border-glass-border pb-px overflow-x-auto no-scrollbar">
+                                {['Overview', 'Courses', 'Users', 'Cohorts', 'Notifications', 'Certificate Content'].map(tab => (
+                                   <button 
+                                      key={tab}
+                                      onClick={() => setPathSubTab(tab)}
+                                      className={`px-8 py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative ${pathSubTab === tab ? 'bg-primary text-white rounded-t-xl' : 'text-muted hover:text-main bg-surface/40 hover:bg-surface border-x border-t border-transparent hover:border-glass-border rounded-t-xl mx-0.5'}`}
+                                   >
+                                      {tab}
+                                      {pathSubTab === tab && <div className="absolute -bottom-px left-0 right-0 h-1 bg-primary" />}
+                                   </button>
+                                ))}
+                             </div>
+
+                             {/* Tab Content: Overview */}
+                             {pathSubTab === 'Overview' && (
+                                <div className="space-y-10 animate-in fade-in duration-500">
+                                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                                      {/* Left: Image Preview */}
+                                      <div className="lg:col-span-4">
+                                         <div className="academy-card aspect-video relative overflow-hidden rounded-[24px] border-none shadow-xl group">
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            <img 
+                                               src="/posh_banner.png" 
+                                               alt="Path Banner" 
+                                               className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                                            />
+                                            <div className="absolute bottom-4 left-4 z-20 opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0">
+                                               <button className="p-2 bg-white/20 backdrop-blur-md rounded-lg text-white border border-white/30 hover:bg-white/40 transition-all"><Camera size={16} /></button>
+                                            </div>
+                                         </div>
+                                      </div>
+
+                                      {/* Right: Stats Grid */}
+                                      <div className="lg:col-span-8">
+                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                            <ManagementStatCard icon={<Calendar size={16} />} label="Start Date" value={newPathForm.enableStart ? newPathForm.startDate : 'Not Enabled'} color="emerald" />
+                                            <ManagementStatCard icon={<Calendar size={16} />} label="End Date" value={newPathForm.enableEnd ? newPathForm.endDate : 'Not Enabled'} color="rose" />
+                                            <ManagementStatCard icon={<GraduationCap size={16} />} label="Required Credits" value={newPathForm.credits} color="amber" />
+                                            <ManagementStatCard icon={<Users size={16} />} label="Users" value="0" color="sky" />
+                                            
+                                            <ManagementStatCard icon={<BookOpen size={16} />} label="Total Courses" value={selectedPathCourses.length} color="indigo" />
+                                            <ManagementStatCard icon={<Layers size={16} />} label="Total Cohorts" value="0" color="orange" />
+                                            <ManagementStatCard icon={<ScrollText size={16} />} label="Required Courses" value="0" color="red" />
+                                            <ManagementStatCard icon={<Users size={16} />} label="Total Users" value="0" color="teal" />
+                                         </div>
+                                         <div className="mt-8">
+                                            <button className="px-12 py-3.5 bg-primary text-white rounded-xl font-black text-[10px] uppercase tracking-[0.25em] shadow-xl shadow-primary/20 hover:scale-105 transition-all flex items-center gap-3">
+                                               <Rocket size={16} /> Publish Path
+                                            </button>
+                                         </div>
+                                      </div>
+                                   </div>
+
+                                   {/* Description Section */}
+                                   <div className="space-y-4">
+                                      <h3 className="text-[11px] font-black uppercase text-muted tracking-widest ml-1">Description</h3>
+                                      <div className="bg-surface border border-glass-border rounded-[24px] p-8 shadow-sm">
+                                         <p className="text-xs font-bold text-main leading-relaxed italic opacity-80">
+                                            {newPathForm.description || 'No description provided for this learning path.'}
+                                         </p>
+                                      </div>
+                                   </div>
+
+                                   {/* Properties Section */}
+                                   <div className="space-y-6">
+                                      <h3 className="text-[11px] font-black uppercase text-muted tracking-widest ml-1">Properties</h3>
+                                      <div className="bg-surface border border-glass-border rounded-[24px] overflow-hidden">
+                                         <div className="p-8 space-y-8">
+                                            <div className="space-y-4">
+                                               <label className="text-[10px] font-black uppercase text-muted tracking-widest">Location:</label>
+                                               <div className="w-full h-14 bg-background/50 border border-glass-border rounded-xl px-6 flex items-center text-xs font-bold text-main">
+                                                  {newPathForm.location || 'Not Specified'}
+                                               </div>
+                                            </div>
+                                            <div className="space-y-4 border-t border-glass-border pt-8">
+                                               <label className="text-[10px] font-black uppercase text-muted tracking-widest">Instructor:</label>
+                                               <div className="w-full h-14 bg-background/50 border border-glass-border rounded-xl px-6 flex items-center text-xs font-bold text-main">
+                                                  {newPathForm.instructor === '1' ? 'Admin User' : 'Not Assigned'}
+                                               </div>
+                                            </div>
+                                         </div>
+                                      </div>
+                                   </div>
+
+                                   {/* Courses Section Section */}
+                                   <div className="space-y-6 pt-10 border-t border-glass-border">
+                                      <div className="flex items-center gap-3">
+                                         <h3 className="text-[11px] font-black uppercase text-main tracking-widest">Dashboard</h3>
+                                         <button className="p-2 bg-surface border border-glass-border rounded-lg text-muted hover:text-primary transition-all">
+                                            <Edit2 size={12} />
+                                         </button>
+                                      </div>
+                                      <div className="py-12 text-center">
+                                         <p className="text-[10px] font-black uppercase text-muted tracking-widest italic">There are no courses to the learning path</p>
+                                         <button onClick={() => setPathSubTab('Courses')} className="mt-6 text-primary font-black text-[10px] uppercase tracking-widest hover:underline flex items-center gap-2 mx-auto">
+                                            <Plus size={14} /> Add Courses Now
+                                         </button>
+                                      </div>
+                                   </div>
+                                </div>
+                             )}
+
+                             {/* Tab Content: Courses */}
+                             {pathSubTab === 'Courses' && (
+                                <div className="space-y-8 animate-in fade-in duration-500">
+                                   {!isAddingCourses ? (
+                                      <div className="space-y-6">
+                                         {/* List Header */}
+                                         <div className="flex flex-wrap items-center justify-between gap-4 bg-surface/40 p-6 rounded-2xl border border-glass-border">
+                                            <div className="relative flex-grow max-w-md">
+                                               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={16} />
+                                               <input 
+                                                  type="text" 
+                                                  placeholder="Search Courses" 
+                                                  className="w-full h-11 bg-background/50 border border-glass-border rounded-xl pl-12 pr-4 text-xs font-bold focus:border-primary transition-all outline-none"
+                                               />
+                                            </div>
+                                            <button 
+                                               onClick={() => setIsAddingCourses(true)}
+                                               className="bg-primary text-white px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 transition-all flex items-center gap-2"
+                                            >
+                                               Add Courses <Plus size={14} />
+                                            </button>
+                                         </div>
+
+                                         {/* Courses Table */}
+                                         {selectedPathCourses.length > 0 ? (
+                                            <div className="academy-card overflow-hidden rounded-[24px]">
+                                               <table className="w-full text-left border-collapse">
+                                                  <thead>
+                                                     <tr className="bg-surface border-b border-glass-border uppercase text-[9px] font-black tracking-widest text-muted">
+                                                        <th className="p-6 w-16"></th>
+                                                        <th className="p-6">Course Name</th>
+                                                        <th className="p-6">Credits</th>
+                                                        <th className="p-6">Required</th>
+                                                        <th className="p-6 text-right">Actions</th>
+                                                     </tr>
+                                                  </thead>
+                                                  <tbody className="divide-y divide-glass-border text-xs font-bold">
+                                                     {selectedPathCourses.map(id => {
+                                                        const course = data.courses.find(c => c.id === id);
+                                                        return (
+                                                           <tr key={id} className="hover:bg-primary/5 transition-colors group">
+                                                              <td className="p-6 text-center">
+                                                                 <div className="w-6 h-6 rounded-full border-2 border-glass-border group-hover:border-primary/50 transition-all" />
+                                                              </td>
+                                                              <td className="p-6 text-main uppercase italic tracking-tight">{course?.fullname || 'Unknown Course'}</td>
+                                                              <td className="p-6 text-muted tabular-nums">3</td>
+                                                              <td className="p-6">
+                                                                 <div className="w-10 h-5 bg-glass-border rounded-full relative cursor-pointer">
+                                                                    <div className="absolute left-1 top-1 w-3 h-3 bg-white rounded-full shadow-sm" />
+                                                                 </div>
+                                                              </td>
+                                                              <td className="p-6 text-right">
+                                                                 <div className="flex items-center justify-end gap-2">
+                                                                    <button className="p-2 bg-surface border border-glass-border rounded-lg text-muted hover:text-primary transition-all flex items-center gap-1">
+                                                                       <Edit2 size={12} /> Edit
+                                                                    </button>
+                                                                    <button 
+                                                                       onClick={() => setSelectedPathCourses(selectedPathCourses.filter(cid => cid !== id))}
+                                                                       className="p-2 bg-surface border border-glass-border rounded-lg text-muted hover:text-red-500 transition-all"
+                                                                    >
+                                                                       <X size={12} />
+                                                                    </button>
+                                                                 </div>
+                                                              </td>
+                                                           </tr>
+                                                        );
+                                                     })}
+                                                  </tbody>
+                                               </table>
+                                            </div>
+                                         ) : (
+                                            <div className="py-12 px-6">
+                                               <p className="text-[10px] font-black uppercase text-muted tracking-widest italic">No Records Found.</p>
+                                            </div>
+                                         )}
+                                      </div>
+                                   ) : (
+                                      /* Dual-Pane Picker Interface */
+                                      <div className="space-y-6 animate-in slide-in-from-bottom-8 duration-500">
+                                         <div className="flex items-center gap-3">
+                                            <button onClick={() => setIsAddingCourses(false)} className="p-2 rounded-full bg-surface border border-glass-border hover:bg-primary/10 hover:text-primary transition-all">
+                                               <ChevronLeft size={16} />
+                                            </button>
+                                            <h3 className="text-sm font-black uppercase text-main italic tracking-tight">Add/Remove Courses</h3>
+                                         </div>
+
+                                         <div className="grid grid-cols-1 lg:grid-cols-11 gap-4 items-center">
+                                            {/* Left Panel: Added Courses */}
+                                            <div className="lg:col-span-5 academy-card p-0 rounded-[20px] overflow-hidden flex flex-col h-[600px] border-none shadow-xl">
+                                               <div className="p-6 space-y-4 border-b border-glass-border">
+                                                  <h4 className="text-[10px] font-black uppercase text-muted tracking-widest">Courses Added</h4>
+                                                  <div className="flex gap-2">
+                                                     <div className="relative flex-grow">
+                                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={14} />
+                                                        <input type="text" placeholder="Search" className="w-full h-11 bg-background/50 border border-glass-border rounded-lg pl-10 pr-4 text-xs font-bold focus:border-primary outline-none" />
+                                                     </div>
+                                                     <button className="px-4 h-11 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-black uppercase tracking-widest">Clear</button>
+                                                     <button className="px-4 h-11 bg-surface border border-glass-border rounded-lg text-[10px] font-black uppercase tracking-widest text-muted flex items-center gap-2">Search options <ChevronRight size={12} /></button>
+                                                  </div>
+                                               </div>
+                                               <div className="flex-grow overflow-y-auto p-6 space-y-4 bg-surface/30 custom-scrollbar">
+                                                  <div className="space-y-2">
+                                                     <p className="text-[10px] font-black uppercase text-main tracking-widest">Courses in Learningpath ({selectedPathCourses.length})</p>
+                                                     {selectedPathCourses.map(id => {
+                                                        const course = data.courses.find(c => c.id === id);
+                                                        return (
+                                                           <div key={id} className="text-xs font-bold text-main opacity-80 pl-4">{course?.fullname || id}</div>
+                                                        );
+                                                     })}
+                                                     {selectedPathCourses.length === 0 && <p className="text-[10px] font-bold text-muted uppercase italic pl-4">None</p>}
+                                                  </div>
+                                               </div>
+                                            </div>
+
+                                            {/* Middle Buttons */}
+                                            <div className="lg:col-span-1 flex flex-col items-center gap-4">
+                                               <button className="w-full py-3 bg-primary text-white rounded-lg font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20">Add</button>
+                                               <div className="flex flex-col items-center opacity-40">
+                                                  <ChevronUp size={16} />
+                                                  <ChevronDown size={16} />
+                                               </div>
+                                               <button className="w-full py-3 bg-primary text-white rounded-lg font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20">Remove</button>
+                                            </div>
+
+                                            {/* Right Panel: Potential Courses */}
+                                            <div className="lg:col-span-5 academy-card p-0 rounded-[20px] overflow-hidden flex flex-col h-[600px] border-none shadow-xl">
+                                               <div className="p-6 space-y-4 border-b border-glass-border">
+                                                  <h4 className="text-[10px] font-black uppercase text-muted tracking-widest">Potential courses to add</h4>
+                                                  <div className="flex gap-2">
+                                                     <div className="relative flex-grow">
+                                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={14} />
+                                                        <input type="text" placeholder="Search" className="w-full h-11 bg-background/50 border border-glass-border rounded-lg pl-10 pr-4 text-xs font-bold focus:border-primary outline-none" />
+                                                     </div>
+                                                     <button className="px-4 h-11 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-black uppercase tracking-widest">Clear</button>
+                                                  </div>
+                                               </div>
+                                               <div className="flex-grow overflow-y-auto p-6 space-y-4 bg-surface/30 custom-scrollbar">
+                                                  <div className="space-y-3">
+                                                     <p className="text-[10px] font-black uppercase text-main tracking-widest">Available courses ({data.courses?.length || 0})</p>
+                                                     {data.courses?.filter(c => !selectedPathCourses.includes(c.id)).map(course => (
+                                                        <div 
+                                                           key={course.id} 
+                                                           onClick={() => setSelectedPathCourses([...selectedPathCourses, course.id])}
+                                                           className="text-xs font-bold text-main opacity-80 pl-4 hover:text-primary cursor-pointer transition-colors"
+                                                        >
+                                                           {course.fullname}
+                                                        </div>
+                                                     ))}
+                                                  </div>
+                                               </div>
+                                            </div>
+                                         </div>
+                                      </div>
+                                   )}
+                                </div>
+                             )}
+
+                             {/* Tab Content: Users */}
+                             {pathSubTab === 'Users' && (
+                                <div className="space-y-8 animate-in fade-in duration-500">
+                                   {!isAddingUsers ? (
+                                      <div className="space-y-6">
+                                         {/* List Header */}
+                                         <div className="flex flex-wrap items-center justify-between gap-4 bg-surface/40 p-6 rounded-2xl border border-glass-border">
+                                            <div className="relative flex-grow max-w-md">
+                                               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={16} />
+                                               <input 
+                                                  type="text" 
+                                                  placeholder="Search Learning Path Users" 
+                                                  className="w-full h-11 bg-background/50 border border-glass-border rounded-xl pl-12 pr-4 text-xs font-bold focus:border-primary transition-all outline-none"
+                                               />
+                                            </div>
+                                            <button 
+                                               onClick={() => setIsAddingUsers(true)}
+                                               className="bg-primary text-white px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 transition-all flex items-center gap-2"
+                                            >
+                                               Enrol Users <Plus size={14} />
+                                            </button>
+                                         </div>
+
+                                         {/* Users List / Table */}
+                                         {selectedPathUsers.length > 0 ? (
+                                            <div className="academy-card overflow-hidden rounded-[24px]">
+                                               <table className="w-full text-left border-collapse">
+                                                  <thead>
+                                                     <tr className="bg-surface border-b border-glass-border uppercase text-[9px] font-black tracking-widest text-muted">
+                                                        <th className="p-6">User Name</th>
+                                                        <th className="p-6">Email</th>
+                                                        <th className="p-6 text-right">Actions</th>
+                                                     </tr>
+                                                  </thead>
+                                                  <tbody className="divide-y divide-glass-border text-xs font-bold">
+                                                     {selectedPathUsers.map(id => {
+                                                        const user = data.users.find(u => u.id === id);
+                                                        return (
+                                                           <tr key={id} className="hover:bg-primary/5 transition-colors group">
+                                                              <td className="p-6 text-main uppercase italic tracking-tight">{user?.firstname} {user?.lastname}</td>
+                                                              <td className="p-6 text-muted font-medium">{user?.email}</td>
+                                                              <td className="p-6 text-right">
+                                                                 <button 
+                                                                    onClick={() => setSelectedPathUsers(selectedPathUsers.filter(uid => uid !== id))}
+                                                                    className="p-2 bg-surface border border-glass-border rounded-lg text-muted hover:text-red-500 transition-all"
+                                                                 >
+                                                                    <X size={12} />
+                                                                 </button>
+                                                              </td>
+                                                           </tr>
+                                                        );
+                                                     })}
+                                                  </tbody>
+                                               </table>
+                                            </div>
+                                         ) : (
+                                            <div className="py-12 px-6">
+                                               <p className="text-[10px] font-black uppercase text-muted tracking-widest italic">No Records Found.</p>
+                                            </div>
+                                         )}
+                                      </div>
+                                   ) : (
+                                      /* Dual-Pane User Picker Interface */
+                                      <div className="space-y-6 animate-in slide-in-from-bottom-8 duration-500">
+                                         <div className="flex items-center gap-3">
+                                            <button onClick={() => setIsAddingUsers(false)} className="p-2 rounded-full bg-surface border border-glass-border hover:bg-primary/10 hover:text-primary transition-all">
+                                               <ChevronLeft size={16} />
+                                            </button>
+                                            <h3 className="text-sm font-black uppercase text-main italic tracking-tight">Add/Remove Users</h3>
+                                         </div>
+
+                                         <div className="grid grid-cols-1 lg:grid-cols-11 gap-4 items-center">
+                                            {/* Left Panel: Added Users */}
+                                            <div className="lg:col-span-5 academy-card p-0 rounded-[20px] overflow-hidden flex flex-col h-[600px] border-none shadow-xl">
+                                               <div className="p-6 space-y-4 border-b border-glass-border">
+                                                  <h4 className="text-[10px] font-black uppercase text-muted tracking-widest">Added users</h4>
+                                                  <div className="flex gap-2">
+                                                     <div className="relative flex-grow">
+                                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={14} />
+                                                        <input type="text" placeholder="Search" className="w-full h-11 bg-background/50 border border-glass-border rounded-lg pl-10 pr-4 text-xs font-bold focus:border-primary outline-none" />
+                                                     </div>
+                                                     <button className="px-4 h-11 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-black uppercase tracking-widest">Clear</button>
+                                                     <button className="px-4 h-11 bg-surface border border-glass-border rounded-lg text-[10px] font-black uppercase tracking-widest text-muted flex items-center gap-2">Search options <ChevronRight size={12} /></button>
+                                                  </div>
+                                               </div>
+                                               <div className="flex-grow overflow-y-auto p-6 space-y-4 bg-surface/30 custom-scrollbar">
+                                                  <div className="space-y-2">
+                                                     {selectedPathUsers.map(id => {
+                                                        const user = data.users.find(u => u.id === id);
+                                                        return (
+                                                           <div key={id} className="text-xs font-bold text-main opacity-80 pl-4">{user?.firstname} {user?.lastname} ({user?.email})</div>
+                                                        );
+                                                     })}
+                                                     {selectedPathUsers.length === 0 && <p className="text-xs font-bold text-muted uppercase pl-4">None</p>}
+                                                  </div>
+                                               </div>
+                                            </div>
+
+                                            {/* Middle Buttons */}
+                                            <div className="lg:col-span-1 flex flex-col items-center gap-4">
+                                               <button className="w-full py-3 bg-primary text-white rounded-lg font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20">Add</button>
+                                               <div className="flex flex-col items-center opacity-40">
+                                                  <ChevronUp size={16} />
+                                                  <ChevronDown size={16} />
+                                               </div>
+                                               <button className="w-full py-3 bg-primary text-white rounded-lg font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20">Remove</button>
+                                            </div>
+
+                                            {/* Right Panel: Potential Users */}
+                                            <div className="lg:col-span-5 academy-card p-0 rounded-[20px] overflow-hidden flex flex-col h-[600px] border-none shadow-xl">
+                                               <div className="p-6 space-y-4 border-b border-glass-border">
+                                                  <h4 className="text-[10px] font-black uppercase text-muted tracking-widest">Potential users to add</h4>
+                                                  <div className="flex gap-2">
+                                                     <div className="relative flex-grow">
+                                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={14} />
+                                                        <input type="text" placeholder="Search" className="w-full h-11 bg-background/50 border border-glass-border rounded-lg pl-10 pr-4 text-xs font-bold focus:border-primary outline-none" />
+                                                     </div>
+                                                     <button className="px-4 h-11 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-black uppercase tracking-widest">Clear</button>
+                                                  </div>
+                                               </div>
+                                               <div className="flex-grow overflow-y-auto p-6 space-y-4 bg-surface/30 custom-scrollbar">
+                                                  <div className="space-y-3">
+                                                     <p className="text-[10px] font-black uppercase text-main tracking-widest">Available users ({data.users?.length || 0})</p>
+                                                     {data.users?.filter(u => !selectedPathUsers.includes(u.id)).map(user => (
+                                                        <div 
+                                                           key={user.id} 
+                                                           onClick={() => setSelectedPathUsers([...selectedPathUsers, user.id])}
+                                                           className="text-xs font-bold text-main opacity-80 pl-4 hover:text-primary cursor-pointer transition-colors"
+                                                        >
+                                                           {user.firstname} {user.lastname} ({user.email})
+                                                        </div>
+                                                     ))}
+                                                  </div>
+                                               </div>
+                                            </div>
+                                         </div>
+                                      </div>
+                                   )}
+                                </div>
+                             )}
+
+                             {/* Tab Content: Cohorts */}
+                             {pathSubTab === 'Cohorts' && (
+                                <div className="space-y-8 animate-in fade-in duration-500">
+                                   {!isAddingCohorts ? (
+                                      <div className="space-y-6">
+                                         {/* List Header */}
+                                         <div className="flex flex-wrap items-center justify-between gap-4 bg-surface/40 p-6 rounded-2xl border border-glass-border">
+                                            <div className="relative flex-grow max-w-md">
+                                               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={16} />
+                                               <input 
+                                                  type="text" 
+                                                  placeholder="Search Cohorts" 
+                                                  className="w-full h-11 bg-background/50 border border-glass-border rounded-xl pl-12 pr-4 text-xs font-bold focus:border-primary transition-all outline-none"
+                                               />
+                                            </div>
+                                            <button 
+                                               onClick={() => setIsAddingCohorts(true)}
+                                               className="bg-primary text-white px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 transition-all flex items-center gap-2"
+                                            >
+                                               Add Cohorts <Plus size={14} />
+                                            </button>
+                                         </div>
+
+                                         {/* Cohorts Table */}
+                                         {selectedPathCohorts.length > 0 ? (
+                                            <div className="academy-card overflow-hidden rounded-[24px]">
+                                               <table className="w-full text-left border-collapse">
+                                                  <thead>
+                                                     <tr className="bg-surface border-b border-glass-border uppercase text-[9px] font-black tracking-widest text-muted">
+                                                        <th className="p-6">Cohort Name</th>
+                                                        <th className="p-6 text-right">Actions</th>
+                                                     </tr>
+                                                  </thead>
+                                                  <tbody className="divide-y divide-glass-border text-xs font-bold">
+                                                     {selectedPathCohorts.map(id => {
+                                                        const cohort = data.cohorts.find(c => c.id === id);
+                                                        return (
+                                                           <tr key={id} className="hover:bg-primary/5 transition-colors group">
+                                                              <td className="p-6 text-main uppercase italic tracking-tight">{cohort?.name || id}</td>
+                                                              <td className="p-6 text-right">
+                                                                 <button 
+                                                                    onClick={() => setSelectedPathCohorts(selectedPathCohorts.filter(cid => cid !== id))}
+                                                                    className="p-2 bg-surface border border-glass-border rounded-lg text-muted hover:text-red-500 transition-all"
+                                                                 >
+                                                                    <X size={12} />
+                                                                 </button>
+                                                              </td>
+                                                           </tr>
+                                                        );
+                                                     })}
+                                                  </tbody>
+                                               </table>
+                                            </div>
+                                         ) : (
+                                            <div className="py-12 px-6">
+                                               <p className="text-[10px] font-black uppercase text-muted tracking-widest italic">No Records Found.</p>
+                                            </div>
+                                         )}
+                                      </div>
+                                   ) : (
+                                      /* Dual-Pane Cohort Picker Interface */
+                                      <div className="space-y-6 animate-in slide-in-from-bottom-8 duration-500">
+                                         <div className="flex items-center gap-3">
+                                            <button onClick={() => setIsAddingCohorts(false)} className="p-2 rounded-full bg-surface border border-glass-border hover:bg-primary/10 hover:text-primary transition-all">
+                                               <ChevronLeft size={16} />
+                                            </button>
+                                            <h3 className="text-sm font-black uppercase text-main italic tracking-tight">Add/Remove Cohorts</h3>
+                                         </div>
+
+                                         <div className="grid grid-cols-1 lg:grid-cols-11 gap-4 items-center">
+                                            <div className="lg:col-span-5 academy-card p-0 rounded-[20px] overflow-hidden flex flex-col h-[600px] border-none shadow-xl">
+                                               <div className="p-6 space-y-4 border-b border-glass-border">
+                                                  <h4 className="text-[10px] font-black uppercase text-muted tracking-widest">Selected Cohorts</h4>
+                                                  <div className="flex gap-2">
+                                                     <div className="relative flex-grow">
+                                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={14} />
+                                                        <input type="text" placeholder="Search" className="w-full h-11 bg-background/50 border border-glass-border rounded-lg pl-10 pr-4 text-xs font-bold focus:border-primary outline-none" />
+                                                     </div>
+                                                     <button className="px-4 h-11 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-black uppercase tracking-widest">Clear</button>
+                                                  </div>
+                                               </div>
+                                               <div className="flex-grow overflow-y-auto p-6 space-y-4 bg-surface/30 custom-scrollbar">
+                                                  <div className="space-y-2">
+                                                     {selectedPathCohorts.map(id => {
+                                                        const cohort = data.cohorts.find(c => c.id === id);
+                                                        return (
+                                                           <div key={id} className="text-xs font-bold text-main opacity-80 pl-4">{cohort?.name || id}</div>
+                                                        );
+                                                     })}
+                                                     {selectedPathCohorts.length === 0 && <p className="text-xs font-bold text-muted uppercase pl-4">None</p>}
+                                                  </div>
+                                               </div>
+                                            </div>
+
+                                            <div className="lg:col-span-1 flex flex-col items-center gap-4">
+                                               <button className="w-full py-3 bg-primary text-white rounded-lg font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20">Add</button>
+                                               <div className="flex flex-col items-center opacity-40">
+                                                  <ChevronUp size={16} />
+                                                  <ChevronDown size={16} />
+                                               </div>
+                                               <button className="w-full py-3 bg-primary text-white rounded-lg font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20">Remove</button>
+                                            </div>
+
+                                            <div className="lg:col-span-5 academy-card p-0 rounded-[20px] overflow-hidden flex flex-col h-[600px] border-none shadow-xl">
+                                               <div className="p-6 space-y-4 border-b border-glass-border">
+                                                  <h4 className="text-[10px] font-black uppercase text-muted tracking-widest">Available Cohorts</h4>
+                                                  <div className="flex gap-2">
+                                                     <div className="relative flex-grow">
+                                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={14} />
+                                                        <input type="text" placeholder="Search" className="w-full h-11 bg-background/50 border border-glass-border rounded-lg pl-10 pr-4 text-xs font-bold focus:border-primary outline-none" />
+                                                     </div>
+                                                     <button className="px-4 h-11 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-black uppercase tracking-widest">Clear</button>
+                                                  </div>
+                                               </div>
+                                               <div className="flex-grow overflow-y-auto p-6 space-y-4 bg-surface/30 custom-scrollbar">
+                                                  <div className="space-y-3">
+                                                     {data.cohorts?.filter(c => !selectedPathCohorts.includes(c.id)).map(cohort => (
+                                                        <div 
+                                                           key={cohort.id} 
+                                                           onClick={() => setSelectedPathCohorts([...selectedPathCohorts, cohort.id])}
+                                                           className="text-xs font-bold text-main opacity-80 pl-4 hover:text-primary cursor-pointer transition-colors"
+                                                        >
+                                                           {cohort.name}
+                                                        </div>
+                                                     ))}
+                                                  </div>
+                                               </div>
+                                            </div>
+                                         </div>
+                                      </div>
+                                   )}
+                                </div>
+                             )}
+
+                             {/* Final placeholders */}
+                             {['Notifications', 'Certificate Content'].includes(pathSubTab) && (
+                                <div className="py-20 text-center animate-in fade-in duration-500 bg-surface/20 rounded-[32px] border border-glass-border border-dashed">
+                                   <div className="w-20 h-20 rounded-[32px] bg-primary/10 flex items-center justify-center text-primary mx-auto mb-6">
+                                      <Bell size={32} />
+                                   </div>
+                                   <h3 className="text-xl font-black text-main uppercase italic tracking-tight">{pathSubTab} Module</h3>
+                                   <p className="text-muted text-[10px] font-bold uppercase tracking-widest mt-2 max-w-sm mx-auto leading-relaxed italic opacity-70">This module is currently being finalized. You will be able to manage {pathSubTab.toLowerCase()} for the "{newPathForm.name}" path here soon.</p>
+                                   <button onClick={() => setPathSubTab('Overview')} className="mt-10 px-8 py-3 bg-surface border border-glass-border text-muted hover:text-primary rounded-xl font-black text-[10px] uppercase tracking-widest transition-all">Back to Overview</button>
+                                </div>
+                             )}
+                          </div>
+                       )}
+                    </div>
+                 </div>
+              )}
+                {subTab === 'Define roles' && (
+                   <div className="space-y-8 animate-in fade-in duration-500">
+                      <div className="academy-card overflow-hidden">
+                         <table className="w-full text-left border-collapse">
                            <thead>
                               <tr className="border-b border-glass-border bg-white/5 uppercase text-[9px] font-black tracking-[0.2em] text-primary/60">
                                  <th className="p-6">Role Name</th>
@@ -1757,7 +2762,7 @@ export default function MasterAdminConsole() {
                                                                </div>
                                                                <div className="text-center">
                                                                   <span className="text-sm font-black text-main">Drag and drop video here, or click to <span className="text-primary hover:underline">browse</span></span>
-                                                                  <p className="text-[10px] font-bold text-muted mt-2 uppercase tracking-widest opacity-60">Supports MP4, MOV, AVI • Max file size: 500MB</p>
+                                                                  <p className="text-[10px] font-bold text-muted mt-2 uppercase tracking-widest opacity-60">Supports MP4, MOV, AVI â€¢ Max file size: 500MB</p>
                                                                </div>
                                                             </>
                                                          )}
@@ -1879,7 +2884,7 @@ export default function MasterAdminConsole() {
                                                                         <UploadCloud size={24} className="text-muted group-hover:text-primary transition-colors" />
                                                                         <div className="text-center">
                                                                            <p className="text-[11px] font-black text-main uppercase tracking-widest">Drag and drop image here, or click to <span className="text-primary underline">browse</span></p>
-                                                                           <p className="text-[9px] font-bold text-muted mt-1 uppercase tracking-widest opacity-60">Supports JPG, JPEG, PNG • Max file size: 5MB</p>
+                                                                           <p className="text-[9px] font-bold text-muted mt-1 uppercase tracking-widest opacity-60">Supports JPG, JPEG, PNG â€¢ Max file size: 5MB</p>
                                                                         </div>
                                                                      </>
                                                                   )}
@@ -2356,7 +3361,7 @@ export default function MasterAdminConsole() {
                                        <span className="text-main uppercase tracking-tighter">{c.name}</span>
                                     </td>
                                     <td className="p-6 text-muted uppercase">
-                                       {c.idnumber || '—'}
+                                       {c.idnumber || 'â€”'}
                                     </td>
                                     <td className="p-6">
                                        <span className="px-3 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full text-[8px] uppercase">{c.coursecount || 0} Courses</span>
@@ -2374,7 +3379,7 @@ export default function MasterAdminConsole() {
             </div>
          </div>
 
-         {/* ── HIGH-DENSITY PROFESSIONAL USER PORTAL ── */}
+         {/* â”€â”€ HIGH-DENSITY PROFESSIONAL USER PORTAL â”€â”€ */}
          {showModal && (
             <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
                <div className="bg-surface w-full max-w-5xl border border-glass-border rounded-3xl shadow-3xl flex h-[80vh] overflow-hidden">
@@ -2693,3 +3698,34 @@ function TopCourseRow({ name, views, enrolled, status }) {
    );
 }
 
+function ToolbarBtn({ icon, dropdown }) {
+   return (
+      <button className="p-2 hover:bg-background/50 rounded-lg text-muted hover:text-primary transition-all flex items-center gap-1 border border-transparent hover:border-glass-border">
+         {icon}
+         {dropdown && <ChevronDown size={10} />}
+      </button>
+   );
+}
+
+
+function ManagementStatCard({ icon, label, value, color }) {
+   const colors = {
+      emerald: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+      rose: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
+      amber: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+      sky: 'bg-sky-500/10 text-sky-500 border-sky-500/20',
+      indigo: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20',
+      orange: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+      red: 'bg-red-500/10 text-red-500 border-red-500/20',
+      teal: 'bg-teal-500/10 text-teal-500 border-teal-500/20'
+   };
+   return (
+      <div className={`p-4 rounded-2xl border ${colors[color] || colors.emerald} flex flex-col gap-2 shadow-sm`}>
+         <div className="flex items-center gap-2">
+            {icon}
+            <span className="text-[9px] font-black uppercase tracking-widest opacity-80">{label}</span>
+         </div>
+         <span className="text-sm font-black tabular-nums">{value}</span>
+      </div>
+   );
+}
