@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const moodleService = require('../services/moodleService');
+const { getUsersManagement } = require('../services/userManagementService');
 
 // --- 🏠 Student Routes ---
 router.get('/me/courses', async (req, res) => {
@@ -20,6 +21,21 @@ router.get('/me/timeline', async (req, res) => {
 });
 
 // --- 🏛️ Admin Routes ---
+router.get('/manage', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const search = req.query.search || '';
+    const sortBy = req.query.sortBy || 'firstname';
+    const sortDir = req.query.sortDir || 'asc';
+
+    const data = await getUsersManagement({ page, limit, search, sortBy, sortDir });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const data = await moodleService.getUsers();
@@ -49,13 +65,6 @@ router.put('/:id', async (req, res) => {
   try {
     await moodleService.updateUser({ id: req.params.id, ...req.body });
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.get('/cohorts', async (req, res) => {
-  try {
-    const cohorts = await moodleService.getCohorts();
-    res.json(cohorts || []);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

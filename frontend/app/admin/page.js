@@ -7,9 +7,25 @@ import {
    Info, Camera, PlusCircle, Tag, Phone, Home, Building, LayoutGrid, ScrollText,
    Building2, Smartphone, Type, List, Link, Image, Video, UploadCloud, ChevronUp, FilePlus, Sparkles, Play, FileText, BrainCircuit, PenTool, HelpCircle, FolderOpen, Check, LayoutDashboard, Bell, Calendar, TrendingUp, Clock, ArrowRight, MessageSquare, ExternalLink, Sliders,
    Bold, Italic, ListOrdered, Undo, Scissors, FileImage, Mic, Webcam, Accessibility, AlertCircle,
-   BellRing, GraduationCap, Rocket
+   BellRing, GraduationCap, Rocket, Settings, Upload, Minus, UserCheck, UserX, SlidersHorizontal, Layers
 } from 'lucide-react';
-import { Layers } from 'lucide-react';
+
+function formatLastAccessDetailed(seconds) {
+   if (!seconds || seconds === 0) return 'Never';
+   const diff = Math.floor(Date.now() / 1000) - seconds;
+   if (diff < 0) return 'Just now';
+   if (diff < 60) return diff === 1 ? '1 sec' : `${diff} secs`;
+   if (diff < 3600) return `${Math.floor(diff / 60)} mins`;
+   const days = Math.floor(diff / 86400);
+   const hours = Math.floor((diff % 86400) / 3600);
+   if (days >= 365) {
+      const years = Math.floor(days / 365);
+      const rem = days % 365;
+      return `${years} year${years > 1 ? 's' : ''} ${rem} Days`;
+   }
+   if (days > 0) return `${days} Days ${hours} hours`;
+   return `${hours} hours`;
+}
 
 function formatRelativeTime(seconds) {
    if (!seconds || seconds === 0) return 'Never logged in';
@@ -21,6 +37,23 @@ function formatRelativeTime(seconds) {
    if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
    return new Date(seconds * 1000).toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
 }
+
+const NOTIFICATION_TAGS = [
+   '{user_fullname}',
+   '{learningpath_name}',
+   '{learningpath_startdate}',
+   '{learningpath_enddate}',
+   '{learningpath_coursesrequired}',
+];
+
+const defaultPathNotifications = () => ({
+   enrollment: { enabled: false, subject: 'Welcome to {learningpath_name}', body: '' },
+   expiration: { enabled: false, subject: 'Learning path expiring soon', body: '' },
+   enrollmentReminder: { enabled: false, subject: 'Enrollment Reminder', daysAfterEnrollment: 3, body: '' },
+   expirationReminder: { enabled: false, subject: 'Expiration Reminder', daysBeforeExpiration: 7, body: '' },
+   completionReminder: { enabled: false, subject: 'Completion Reminder', dayFrequency: 7, body: '' },
+   pathCompletion: { enabled: false, subject: 'Congratulations — path completed', body: '' },
+});
 
 export default function MasterAdminConsole() {
    const [mainTab, setMainTab] = useState('dashboard');
@@ -72,13 +105,23 @@ export default function MasterAdminConsole() {
    const [pathSuccess, setPathSuccess] = useState(false);
    const [isAddingCourses, setIsAddingCourses] = useState(false);
    const [isAddingUsers, setIsAddingUsers] = useState(false);
-   const [isAddingCohorts, setIsAddingCohorts] = useState(false);
+   const [cohortSearchQuery, setCohortSearchQuery] = useState('');
+   const [selectedCohortIds, setSelectedCohortIds] = useState([]);
+   const [showCohortModal, setShowCohortModal] = useState(false);
+   const [cohortForm, setCohortForm] = useState({ name: '', description: '' });
+   const [pathNotifications, setPathNotifications] = useState(defaultPathNotifications);
     const [selectedPathCourses, setSelectedPathCourses] = useState([]);
     const [selectedPathUsers, setSelectedPathUsers] = useState([]);
     const [selectedPathCohorts, setSelectedPathCohorts] = useState([]);
     const [showFilterDropdown, setShowFilterDropdown] = useState(false);
    const [currentPage, setCurrentPage] = useState(1);
    const [itemsPerPage, setItemsPerPage] = useState(10);
+   const [userManageStats, setUserManageStats] = useState(null);
+   const [manageUsers, setManageUsers] = useState([]);
+   const [userPagination, setUserPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
+   const [userSort, setUserSort] = useState({ field: 'firstname', dir: 'asc' });
+   const [selectedUserIds, setSelectedUserIds] = useState([]);
+   const [showMultitenant, setShowMultitenant] = useState(false);
    const [roleForm, setRoleForm] = useState({ userid: '', roleid: '', contextlevel: 'system', instanceid: 0 });
 
    const [courseForm, setCourseForm] = useState({ fullname: '', categoryid: '', summary: '', imageurl: '' });
@@ -155,8 +198,26 @@ export default function MasterAdminConsole() {
     }, [mainTab, subTab, courseStep]);
 
    useEffect(() => {
+      if (pathStep === 2 && pathSubTab === 'Cohorts') {
+         fetchCohortsList();
+      }
+   }, [pathStep, pathSubTab]);
+
+   useEffect(() => {
+      if (pathStep === 2 && pathSubTab === 'Notifications' && editingPath?.id) {
+         loadPathNotifications(editingPath.id);
+      }
+   }, [pathStep, pathSubTab, editingPath?.id]);
+
+   useEffect(() => {
       setCurrentPage(1);
    }, [searchQuery, filterByRole, activeFilters]);
+
+   useEffect(() => {
+      if (subTab !== 'Manage users') return;
+      const timer = setTimeout(() => fetchManageUsers(), searchQuery ? 350 : 0);
+      return () => clearTimeout(timer);
+   }, [subTab, currentPage, itemsPerPage, searchQuery, userSort]);
 
    const filteredUsers = data.users?.filter(u => {
       // 1. Role Category Filter
@@ -214,9 +275,12 @@ export default function MasterAdminConsole() {
          }
 
          let endpoint = '';
-         if (subTab === 'Browse users') endpoint = 'users';
-         else if (subTab === 'Manage courses' || subTab === 'Add course') endpoint = 'courses';
+         if (subTab === 'Manage courses' || subTab === 'Add course') endpoint = 'courses';
          else if (subTab === 'Define roles' || subTab === 'Assign system roles') endpoint = 'roles';
+         else if (subTab === 'Manage cohorts') {
+            const cohortRes = await fetch(`http://localhost:4000/api/cohorts`, { signal }).then(r => r.json());
+            setData(prev => ({ ...prev, cohorts: Array.isArray(cohortRes) ? cohortRes : [] }));
+         }
          else if (subTab === 'Learning Paths' || subTab === 'Add Path') {
             endpoint = 'learningpaths';
             // Also need courses for selection if adding path
@@ -242,8 +306,8 @@ export default function MasterAdminConsole() {
          // ðŸ”„ Main Endpoint Fetch
          if (endpoint) {
             const res = await fetch(`http://localhost:4000/api/${endpoint}`, { signal }).then(r => r.json());
-            let actualData = Array.isArray(res) ? res : (res.users || res.courses || res.roles || res.learningpaths || []);
-            setData(prev => ({ ...prev, [endpoint]: actualData }));
+            let actualData = Array.isArray(res) ? res : (res.users || res.courses || res.roles || res.learningpaths || res.cohorts || []);
+            if (endpoint) setData(prev => ({ ...prev, [endpoint]: actualData }));
          }
 
          // Fetch categories if doing courses
@@ -477,6 +541,134 @@ export default function MasterAdminConsole() {
       setLoading(false);
    };
 
+   const fetchManageUsers = async () => {
+      setLoading(true);
+      try {
+         const params = new URLSearchParams({
+            page: String(currentPage),
+            limit: String(itemsPerPage),
+            search: searchQuery,
+            sortBy: userSort.field,
+            sortDir: userSort.dir,
+         });
+         const res = await fetch(`http://localhost:4000/api/users/manage?${params}`).then(r => r.json());
+         if (res.error) throw new Error(res.error);
+         setUserManageStats(res.stats);
+         setManageUsers(res.users || []);
+         setUserPagination(res.pagination || { page: 1, limit: itemsPerPage, total: 0, totalPages: 1 });
+      } catch (err) {
+         console.error('Failed to load manage users:', err);
+         alert('Failed to load users from Moodle: ' + err.message);
+      }
+      setLoading(false);
+   };
+
+   const toggleUserSort = (field) => {
+      setUserSort(prev => ({
+         field,
+         dir: prev.field === field && prev.dir === 'asc' ? 'desc' : 'asc',
+      }));
+      setCurrentPage(1);
+   };
+
+   const fetchCohortsList = async () => {
+      setLoading(true);
+      try {
+         const res = await fetch('http://localhost:4000/api/cohorts').then(r => r.json());
+         if (res.error) throw new Error(res.hint ? `${res.error}\n\n${res.hint}` : res.error);
+         setData(prev => ({ ...prev, cohorts: Array.isArray(res) ? res : [] }));
+      } catch (err) {
+         console.error('Failed to fetch cohorts:', err);
+         alert('Could not load cohorts. ' + (err.message || 'Check that the node API is running on port 4000.'));
+      } finally {
+         setLoading(false);
+      }
+   };
+
+   const handleCreateCohort = async (presetName = null) => {
+      const name = presetName || cohortForm.name?.trim();
+      if (!name) return alert('Please enter a cohort name');
+      setLoading(true);
+      try {
+         const res = await fetch('http://localhost:4000/api/cohorts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description: cohortForm.description || '' })
+         }).then(r => r.json());
+         if (res.error) throw new Error(res.hint ? `${res.error}\n\n${res.hint}` : res.error);
+         const msg = res._warning
+            ? `Cohort "${name}" created (local store).\n\n${res._warning}`
+            : `Cohort "${name}" created successfully!`;
+         alert(msg);
+         setCohortForm({ name: '', description: '' });
+         setShowCohortModal(false);
+         await fetchCohortsList();
+      } catch (err) {
+         alert('Failed to create cohort: ' + err.message);
+      }
+      setLoading(false);
+   };
+
+   const loadPathNotifications = async (pathId) => {
+      try {
+         const res = await fetch(`http://localhost:4000/api/learningpaths/${pathId}/notifications`).then(r => r.json());
+         if (res.error) throw new Error(res.error);
+         setPathNotifications({ ...defaultPathNotifications(), ...res });
+      } catch (err) {
+         console.error('Failed to load notifications:', err);
+      }
+   };
+
+   const updateNotificationBlock = (key, patch) => {
+      setPathNotifications(prev => ({
+         ...prev,
+         [key]: { ...prev[key], ...patch },
+      }));
+   };
+
+   const handleSaveNotifications = async () => {
+      if (!editingPath?.id) return alert('Save the learning path first before configuring notifications.');
+      setLoading(true);
+      try {
+         const res = await fetch(`http://localhost:4000/api/learningpaths/${editingPath.id}/notifications`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(pathNotifications),
+         }).then(r => r.json());
+         if (res.error) throw new Error(res.error);
+         setPathSuccess(true);
+         alert('Notification templates saved successfully!');
+      } catch (err) {
+         alert('Failed to save notifications: ' + err.message);
+      }
+      setLoading(false);
+   };
+
+   const handleCancelNotifications = () => {
+      if (editingPath?.id) loadPathNotifications(editingPath.id);
+      else setPathNotifications(defaultPathNotifications());
+   };
+
+   const handleDeleteCohorts = async () => {
+      if (selectedCohortIds.length === 0) return;
+      if (!confirm(`Delete ${selectedCohortIds.length} cohort(s)? This cannot be undone.`)) return;
+      setLoading(true);
+      try {
+         const res = await fetch('http://localhost:4000/api/cohorts', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cohortids: selectedCohortIds })
+         }).then(r => r.json());
+         if (res.error) throw new Error(res.error);
+         alert('Cohort(s) deleted successfully!');
+         setSelectedCohortIds([]);
+         await fetchCohortsList();
+      } catch (err) {
+         alert('Failed to delete cohorts: ' + err.message);
+      }
+      setLoading(false);
+   };
+
    const handleCreatePath = async () => {
       if (!newPathForm.name) return alert("Please enter path name");
       setLoading(true);
@@ -487,13 +679,14 @@ export default function MasterAdminConsole() {
          const res = await fetch(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...newPathForm, courses: selectedPathCourses })
+            body: JSON.stringify({ ...newPathForm, courses: selectedPathCourses, cohorts: selectedPathCohorts })
          }).then(r => r.json());
          
          if (res.error) throw new Error(res.error);
          
+         setEditingPath(res);
+         setPathNotifications(res.notifications || defaultPathNotifications());
          setPathSuccess(true);
-         // Stay in Add Path subtab and move to Step 2 (Management View)
          setPathStep(2);
          setPathSubTab('Overview');
          fetchTabData();
@@ -613,21 +806,34 @@ export default function MasterAdminConsole() {
 
    const menuItems = {
       dashboard: { label: 'Dashboard', icon: <LayoutDashboard size={18} />, subs: ['Overview'] },
-      users: { label: 'User Management', icon: <Users size={18} />, subs: ['Browse users', 'Add user'] },
+      users: { label: 'User Management', icon: <Users size={18} />, subs: ['Manage users', 'Add user'] },
       courses: { label: 'Course Library', icon: <BookOpen size={18} />, subs: ['Manage courses', 'Categories', 'Add course'] },
       permissions: { label: 'System Roles', icon: <ShieldCheck size={18} />, subs: ['Define roles', 'Assign system roles'] },
       learningPaths: { label: 'Learning Paths', icon: <MapPin size={18} />, subs: ['Learning Paths', 'Add Path'] },
+      cohorts: { label: 'Cohort Groups', icon: <Layers size={18} />, subs: ['Manage cohorts'] },
    };
+
+   const formatCohortDate = (cohort) => {
+      const ts = cohort?.timecreated;
+      if (!ts) return 'N/A';
+      return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+   };
+
+   const filteredCohorts = (data.cohorts || []).filter(c => {
+      if (!cohortSearchQuery) return true;
+      const q = cohortSearchQuery.toLowerCase();
+      return c.name?.toLowerCase().includes(q) || c.idnumber?.toLowerCase().includes(q);
+   });
 
    return (
       <div className="w-full h-[calc(100vh-80px)] flex overflow-hidden bg-background text-main">
 
          {/* MASTER SIDEBAR */}
-         <div className="w-72 flex-shrink-0 bg-surface border-r border-glass-border flex flex-col shadow-sm">
-            <div className="p-8 border-b border-glass-border">
-               <h1 className="text-xl font-black italic uppercase tracking-tighter">Site<br /><span className="text-primary not-italic">Admin</span></h1>
+         <div className="w-64 flex-shrink-0 bg-surface border-r border-glass-border flex flex-col shadow-sm">
+            <div className="p-5 border-b border-glass-border">
+               <h1 className="text-lg font-black italic uppercase tracking-tighter">Site<br /><span className="text-primary not-italic">Admin</span></h1>
             </div>
-            <nav className="flex-grow p-4 space-y-1.5">
+            <nav className="flex-grow p-3 space-y-1">
                {Object.entries(menuItems).map(([key, item]) => (
                   <div key={key}>
                      <button onClick={() => { setMainTab(key); setSubTab(item.subs[0]); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-black uppercase text-[10px] tracking-widest ${mainTab === key ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted hover:bg-surface-hover'}`}>{item.icon} {item.label}</button>
@@ -642,25 +848,25 @@ export default function MasterAdminConsole() {
          </div>
 
          <div className="flex-grow flex flex-col min-w-0">
-            <div className="h-20 bg-surface/80 border-b border-glass-border px-8 flex items-center justify-between backdrop-blur-md sticky top-0 z-10">
+            <div className="h-16 bg-surface/80 border-b border-glass-border px-5 sm:px-6 flex items-center justify-between backdrop-blur-md sticky top-0 z-10">
                <h2 className="text-lg font-black italic tracking-tight uppercase text-main/90">{subTab}</h2>
                {loading && <Loader2 className="animate-spin text-primary" size={18} />}
             </div>
 
-            <div className="flex-grow overflow-y-auto p-8 custom-scrollbar">
+            <div className="flex-grow overflow-y-auto p-5 sm:p-6 custom-scrollbar">
                {mainTab === 'dashboard' && subTab === 'Overview' && (
-                  <div className="space-y-8 animate-in fade-in duration-700">
+                  <div className="space-y-5 animate-in fade-in duration-700 max-w-[1600px] mx-auto">
                      {/* TOP STATS */}
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <StatCard icon={<Users size={20} />} label="Total Users" value={data.users.length} sub="Active Now" />
                         <StatCard icon={<Activity size={20} />} label="Active Users" value={data.users.filter(u => u.lastaccess > (Date.now() / 1000 - 86400)).length} sub="Past 24h" />
                         <StatCard icon={<MapPin size={20} />} label="Learning Paths" value={data.learningpaths?.length || 0} sub="Active Paths" />
                         <StatCard icon={<BookOpen size={20} />} label="Total Courses" value={data.courses.length} sub="Published" />
                      </div>
 
-                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                         {/* GENERAL OVERVIEW - PIE CHARTS */}
-                        <div className="lg:col-span-2 academy-card p-8 space-y-8">
+                        <div className="lg:col-span-2 academy-card p-5 sm:p-6 space-y-5">
                            <div className="flex justify-between items-center">
                               <h3 className="text-[12px] font-black uppercase tracking-widest text-main">General Overview</h3>
                               <div className="flex gap-2">
@@ -668,10 +874,10 @@ export default function MasterAdminConsole() {
                               </div>
                            </div>
 
-                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                              <div className="space-y-6">
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                              <div className="space-y-3">
                                  <p className="text-[10px] font-black uppercase text-muted tracking-widest">User Distribution Overview</p>
-                                 <div className="flex items-center gap-6">
+                                 <div className="flex items-center gap-4">
                                     {(() => {
                                        const total = data.users.length || 1;
                                        const active = data.users.filter(u => u.lastaccess > (Date.now() / 1000 - 86400)).length;
@@ -700,9 +906,9 @@ export default function MasterAdminConsole() {
                                     </div>
                                  </div>
                               </div>
-                              <div className="space-y-6">
+                              <div className="space-y-3">
                                  <p className="text-[10px] font-black uppercase text-muted tracking-widest">User Enrollments Breakdown</p>
-                                 <div className="flex items-center gap-6">
+                                 <div className="flex items-center gap-4">
                                     {(() => {
                                        const total = data.users.length || 1;
                                        const enrolled = Math.floor(total * 0.8); // Mocking enrollment ratio as I don't have enrollment endpoint yet
@@ -735,8 +941,8 @@ export default function MasterAdminConsole() {
 
 
                         {/* CALENDAR SECTION */}
-                        <div className="academy-card p-8">
-                           <div className="flex justify-between items-center mb-8">
+                        <div className="academy-card p-5 sm:p-6">
+                           <div className="flex justify-between items-center mb-4">
                               <h3 className="text-[12px] font-black uppercase tracking-widest text-main">April 2026</h3>
                               <div className="flex gap-2">
                                  <button className="p-2 hover:bg-white/5 rounded-lg transition-all"><ChevronLeft size={16} /></button>
@@ -745,7 +951,7 @@ export default function MasterAdminConsole() {
                               </div>
                            </div>
 
-                           <div className="grid grid-cols-7 gap-y-6 text-center">
+                           <div className="grid grid-cols-7 gap-y-3 text-center">
                               {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
                                  <span key={d} className="text-[9px] font-black uppercase text-muted tracking-widest">{d}</span>
                               ))}
@@ -802,73 +1008,68 @@ export default function MasterAdminConsole() {
                      </div>
 
                      {/* LEARNING HOURS CHART (FULL WIDTH) */}
-                     <div className="academy-card p-8 space-y-8 mb-8">
-                        <div className="flex justify-between items-center">
-                           <div>
-                              <h3 className="text-[18px] font-black text-main tracking-tight mb-2">Learning Hours</h3>
-                              <div className="flex gap-4">
-                                 <div className="bg-[#e0f2fe] text-[#0ea5e9] px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tight">Total Hours: 75.29</div>
-                                 <div className="bg-[#eff6ff] text-[#3b82f6] px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tight">Avg Hours: 15.06</div>
+                     <div className="academy-card p-5 sm:p-6">
+                        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                           <div className="min-w-0">
+                              <h3 className="text-base font-black text-main tracking-tight">Learning Hours</h3>
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                 <span className="bg-sky-500/15 text-sky-600 border border-sky-500/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">Total Hours: 75.29</span>
+                                 <span className="bg-primary/10 text-primary border border-primary/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">Avg Hours: 15.06</span>
                               </div>
                            </div>
-                           <div className="flex gap-3">
-                              <div className="flex items-center gap-2 bg-surface/40 border border-glass-border px-4 py-2 rounded-xl">
+                           <div className="flex items-center gap-2 shrink-0">
+                              <div className="flex items-center gap-2 bg-surface/60 border border-glass-border px-3 py-2 rounded-xl">
                                  <span className="text-[10px] font-black text-main uppercase">This Week</span>
                                  <ChevronDown size={14} className="text-muted" />
                               </div>
-                              <button className="p-2.5 bg-white/5 rounded-xl border border-glass-border hover:bg-primary/10 transition-all group"><Sliders size={16} className="text-muted group-hover:text-primary transition-colors" /></button>
+                              <button type="button" className="p-2 bg-surface border border-glass-border rounded-xl hover:bg-primary/10 transition-all group">
+                                 <Sliders size={16} className="text-muted group-hover:text-primary transition-colors" />
+                              </button>
                            </div>
                         </div>
 
-                        <div className="relative h-[300px] w-full mt-12 flex items-end justify-between px-16 pb-10">
-                           {/* Y-Axis Labels */}
-                           <div className="absolute left-0 top-0 bottom-10 flex flex-col justify-between text-[10px] font-black text-muted/60 pr-6">
-                              <span>40.0hrs</span>
-                              <span>35.0hrs</span>
-                              <span>30.0hrs</span>
-                              <span>25.0hrs</span>
-                              <span>20.0hrs</span>
-                              <span>15.0hrs</span>
-                              <span>10.0hrs</span>
-                              <span>5.0hrs</span>
-                              <span>0.0hrs</span>
+                        <div className="relative h-[240px] w-full pl-12 pr-2">
+                           <div className="absolute left-0 top-0 bottom-8 flex flex-col justify-between text-[9px] font-bold text-muted/70 w-10 text-right">
+                              {[40, 35, 30, 25, 20, 15, 10, 5, 0].map(v => (
+                                 <span key={v}>{v}.0hrs</span>
+                              ))}
                            </div>
-
-                           {/* Grid Lines */}
-                           <div className="absolute inset-0 left-16 bottom-10 flex flex-col justify-between pointer-events-none opacity-10">
-                              {[...Array(9)].map((_, i) => <div key={i} className="w-full border-t border-dashed border-muted/50" />)}
+                           <div className="absolute left-12 right-0 top-0 bottom-8 flex flex-col justify-between pointer-events-none opacity-[0.12]">
+                              {[...Array(9)].map((_, i) => (
+                                 <div key={i} className="w-full border-t border-dashed border-muted" />
+                              ))}
                            </div>
-
-                           {/* Bars */}
-                           {[
-                              { label: 'Mar 26', value: 14.5, active: false },
-                              { label: 'Apr 02', value: 20.8, active: false },
-                              { label: 'Apr 09', value: 39.2, active: true },
-                              { label: 'Apr 16', value: 0, active: false },
-                              { label: 'Apr 23', value: 1.5, active: false },
-                           ].map((bar, i) => (
-                              <div key={i} className="relative flex flex-col items-center group w-16">
-                                 <div
-                                    className={`w-full rounded-t-xl transition-all duration-700 ease-out cursor-pointer ${bar.active ? 'bg-[#7dd3fc] shadow-lg shadow-[#0ea5e9]/30' : 'bg-[#7dd3fc]/40 hover:bg-[#7dd3fc]'}`}
-                                    style={{ height: `${(bar.value / 40) * 100}%` }}
-                                 >
-                                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-surface border border-glass-border px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all pointer-events-none shadow-2xl">
-                                       <span className="text-[10px] font-black text-primary">{bar.value} hrs</span>
+                           <div className="absolute left-12 right-0 bottom-8 h-px bg-glass-border" />
+                           <div className="absolute left-12 right-0 top-0 bottom-8 flex items-end justify-around gap-2">
+                              {[
+                                 { label: 'Mar 26', value: 14.5, active: false },
+                                 { label: 'Apr 02', value: 20.8, active: false },
+                                 { label: 'Apr 09', value: 39.2, active: true },
+                                 { label: 'Apr 16', value: 0, active: false },
+                                 { label: 'Apr 23', value: 1.5, active: false },
+                              ].map((bar, i) => (
+                                 <div key={i} className="relative flex flex-col items-center justify-end flex-1 max-w-[72px] h-full pb-5 group">
+                                    <div className="relative w-full flex flex-col justify-end flex-1 min-h-0 w-full max-w-[48px]">
+                                       <div
+                                          className={`w-full rounded-t-lg transition-all duration-500 ${bar.active ? 'bg-sky-400 shadow-md shadow-sky-500/25' : 'bg-sky-400/45 hover:bg-sky-400/70'}`}
+                                          style={{ height: `${Math.max((bar.value / 40) * 100, bar.value > 0 ? 4 : 0)}%` }}
+                                       >
+                                          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-surface border border-glass-border px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity shadow-lg whitespace-nowrap z-10">
+                                             <span className="text-[9px] font-black text-primary">{bar.value} hrs</span>
+                                          </div>
+                                       </div>
                                     </div>
+                                    <span className="text-[9px] font-bold text-muted uppercase tracking-wide absolute bottom-0 left-1/2 -translate-x-1/2 whitespace-nowrap">{bar.label}</span>
                                  </div>
-                                 <span className="absolute -bottom-8 text-[9px] font-black text-muted uppercase tracking-wider whitespace-nowrap">{bar.label}</span>
-                              </div>
-                           ))}
-
-                           {/* X-Axis Line */}
-                           <div className="absolute bottom-10 left-16 right-0 h-px bg-glass-border" />
+                              ))}
+                           </div>
                         </div>
                      </div>
 
-                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
+                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                         {/* COURSES OVERVIEW */}
-                        <div className="academy-card p-8">
-                           <div className="flex justify-between items-center mb-8">
+                        <div className="academy-card p-5 sm:p-6">
+                           <div className="flex justify-between items-center mb-4">
                               <h3 className="text-[12px] font-black uppercase tracking-widest text-main">Courses Overview & Enrollment</h3>
                               <div className="flex gap-2">
                                  <button className="p-2 bg-white/5 rounded-lg border border-glass-border"><Filter size={14} className="text-muted" /></button>
@@ -877,13 +1078,13 @@ export default function MasterAdminConsole() {
                               </div>
                            </div>
 
-                           <div className="flex gap-12 mb-8 border-b border-glass-border pb-8">
+                           <div className="flex flex-wrap gap-4 sm:gap-6 mb-3 border-b border-glass-border pb-3">
                               <StatItem label="Total Course" value={data.courses.length} />
                               <StatItem label="With Enrollments" value={data.courses.filter(c => c.visible).length} color="text-primary" />
                               <StatItem label="Without Enrollments" value={data.courses.filter(c => !c.visible).length} color="text-muted" />
                            </div>
 
-                           <div className="space-y-4">
+                           <div className="space-y-2">
                               <div className="grid grid-cols-5 text-[8px] font-black uppercase text-muted tracking-widest px-4 border-b border-glass-border pb-3">
                                  <div className="col-span-2">Top Performing Course</div>
                                  <div>Views</div>
@@ -896,7 +1097,7 @@ export default function MasterAdminConsole() {
                               {data.courses.length === 0 && <p className="text-[10px] text-center p-4 text-muted font-black uppercase">No courses found</p>}
                            </div>
 
-                           <div className="flex justify-center gap-4 mt-8 pt-6 border-t border-glass-border">
+                           <div className="flex justify-center items-center gap-3 mt-4 pt-4 border-t border-glass-border">
                               <button
                                  disabled={dashboardPage === 1}
                                  onClick={() => setDashboardPage(prev => Math.max(1, prev - 1))}
@@ -918,20 +1119,20 @@ export default function MasterAdminConsole() {
                         </div>
 
                         {/* LATEST ANNOUNCEMENTS */}
-                        <div className="academy-card p-8">
-                           <div className="flex justify-between items-center mb-8">
+                        <div className="academy-card p-5 sm:p-6">
+                           <div className="flex justify-between items-center mb-4">
                               <h3 className="text-[12px] font-black uppercase tracking-widest text-main">Latest Announcements</h3>
-                              <button className="p-2 bg-primary text-white rounded-lg shadow-lg shadow-primary/20 hover:scale-105 transition-all"><Plus size={16} /></button>
+                              <button type="button" className="p-2 bg-primary text-white rounded-lg shadow-md shadow-primary/20 hover:scale-105 transition-all"><Plus size={16} /></button>
                            </div>
 
-                           <div className="space-y-4">
+                           <div className="space-y-2">
                               {data.announcements.map(ann => (
-                                 <div key={ann.id} className="flex items-center justify-between p-5 bg-white/5 rounded-2xl border border-glass-border hover:border-primary/30 transition-all group">
-                                    <div className="flex items-center gap-5">
-                                       <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                                 <div key={ann.id} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-glass-border hover:border-primary/30 transition-all group gap-3">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                       <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform shrink-0">
                                           {ann.icon}
                                        </div>
-                                       <div>
+                                       <div className="min-w-0">
                                           <h4 className="text-[11px] font-black text-main uppercase tracking-tight line-clamp-1">{ann.title}</h4>
                                           <div className="flex items-center gap-3 mt-1.5">
                                              <span className="text-[9px] font-bold text-muted uppercase flex items-center gap-1"><Users size={10} /> {ann.author}</span>
@@ -946,10 +1147,10 @@ export default function MasterAdminConsole() {
                               ))}
                            </div>
 
-                           <div className="flex justify-center gap-4 mt-8 pt-6 border-t border-glass-border">
-                              <button className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all"><ChevronLeft size={14} /></button>
+                           <div className="flex justify-center items-center gap-3 mt-4 pt-4 border-t border-glass-border">
+                              <button type="button" className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all"><ChevronLeft size={14} /></button>
                               <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest"><span className="text-primary">1</span> / 4</div>
-                              <button className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all"><ChevronRight size={14} /></button>
+                              <button type="button" className="p-2 hover:bg-white/5 rounded-xl border border-glass-border transition-all"><ChevronRight size={14} /></button>
                            </div>
                         </div>
                      </div>
@@ -978,138 +1179,166 @@ export default function MasterAdminConsole() {
                   </div>
                )} */}
 
-               {subTab === 'Browse users' && (
-                  <div className="space-y-6 animate-in fade-in duration-500">
-                     <div className="flex justify-between items-center bg-surface/60 p-5 rounded-2xl border border-glass-border shadow-sm">
-                        <button onClick={() => {
-                           // ... existing form reset ...
-                           setForm({
-                              username: '', auth: 'manual', suspended: false, generatepass: false, password: '', forcechange: false,
-                              firstname: '', lastname: '', email: '', visibility: '1', city: '', country: 'IN', timezone: '99', lang: 'en',
-                              description: '', idnumber: '', institution: '', department: '', phone1: '', phone2: '', address: '',
-                              profileimageurl: '', roleid: ''
-                           });
-                           if (data.roles.length === 0) fetch('http://localhost:4000/api/roles').then(r => r.json()).then(res => {
-                              setData(prev => ({ ...prev, roles: Array.isArray(res) ? res : (res.roles || []) }));
-                           });
-                           setShowModal('Add User');
-                        }} className="bg-primary text-white px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md shadow-primary/20 hover:shadow-lg hover:-translate-y-0.5 transition-all">Add a new user</button>
-                        <div className="flex gap-3 items-center">
-                           <div className="relative">
-                              <button
-                                 onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                                 className={`bg-surface border border-glass-border px-5 py-3.5 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${showFilterDropdown ? 'text-primary border-primary shadow-sm' : 'text-muted hover:bg-surface-hover'}`}
-                              >
-                                 <Filter size={14} /> Filter: {activeFilters.length}
-                              </button>
-                              {showFilterDropdown && (
-                                 <div className="absolute right-0 mt-3 w-64 bg-surface border border-glass-border rounded-[24px] shadow-3xl z-[100] p-6 space-y-6 animate-in zoom-in-95 duration-200">
-                                    <div>
-                                       <p className="text-[10px] font-black uppercase text-primary mb-4 tracking-widest px-1">Search Fields</p>
-                                       <div className="space-y-1">
-                                          {['name', 'email', 'role'].map(f => (
-                                             <label key={f} className="flex items-center gap-3 px-3 py-2 hover:bg-white/5 rounded-xl cursor-pointer group">
-                                                <input
-                                                   type="checkbox"
-                                                   checked={activeFilters.includes(f)}
-                                                   onChange={() => {
-                                                      if (activeFilters.includes(f)) setActiveFilters(activeFilters.filter(x => x !== f));
-                                                      else setActiveFilters([...activeFilters, f]);
-                                                   }}
-                                                   className="w-4 h-4 accent-primary"
-                                                />
-                                                <span className={`text-[9px] font-black uppercase tracking-widest transition-colors ${activeFilters.includes(f) ? 'text-primary' : 'text-muted group-hover:text-main'}`}>{f}</span>
-                                             </label>
-                                          ))}
-                                       </div>
-                                    </div>
-
-                                    <div className="pt-2 border-t border-glass-border">
-                                       <p className="text-[10px] font-black uppercase text-primary mb-4 tracking-widest px-1">Filter by Role</p>
-                                       <div className="grid grid-cols-1 gap-1">
-                                          {['all', 'admin', 'teacher', 'student'].map(r => (
-                                             <button
-                                                key={r}
-                                                onClick={() => setFilterByRole(r)}
-                                                className={`w-full text-left px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterByRole === r ? 'bg-primary text-white' : 'text-muted hover:bg-white/5'}`}
-                                             >
-                                                {r}
-                                             </button>
-                                          ))}
-                                       </div>
-                                    </div>
-                                 </div>
-                              )}
-                           </div>
-                           <div className="relative w-80">
-                              <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-muted" size={16} />
-                              <input
-                                 value={searchQuery}
-                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                 className="academy-input w-full pl-14 h-12 bg-background/30"
-                                 placeholder="Search users..."
-                              />
-                           </div>
+               {subTab === 'Manage users' && (
+                  <div className="space-y-4 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+                     <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                           <h3 className="text-xl font-black text-main tracking-tight">Manage Users</h3>
+                           <Info size={16} className="text-muted/60" />
                         </div>
+                        <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-glass-border bg-surface text-[10px] font-black uppercase tracking-widest text-muted hover:text-primary transition-all">
+                           <Settings size={14} /> Users Settings
+                        </button>
                      </div>
 
-                     <div className="academy-card overflow-hidden text-[11px]">
-                        <table className="w-full text-left border-collapse">
+                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                        <ManageUserStatCard label="Total Users" value={userManageStats?.totalUsers ?? '—'} icon={<Users size={22} />} tone="blue" />
+                        <ManageUserStatCard label="Total Enrolments" value={userManageStats?.totalEnrolments ?? '—'} icon={<GraduationCap size={22} />} tone="purple" />
+                        <ManageUserStatCard label="Inactive Users" value={userManageStats?.inactiveUsers ?? '—'} icon={<UserX size={22} />} tone="orange" />
+                        <ManageUserStatCard label="Active Users" value={userManageStats?.activeUsers ?? '—'} icon={<UserCheck size={22} />} tone="green" />
+                        <ManageUserStatCard label="New Users (This Month)" value={userManageStats?.newUsersThisMonth != null ? `+${userManageStats.newUsersThisMonth}` : '—'} icon={<UserPlus size={22} />} tone="amber" />
+                     </div>
+
+                     <div className="flex flex-wrap items-center gap-2 bg-surface/50 p-3 rounded-xl border border-glass-border">
+                        <div className="relative flex-grow min-w-[200px] max-w-md">
+                           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={16} />
+                           <input
+                              value={searchQuery}
+                              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                              className="w-full h-11 bg-background/50 border border-glass-border rounded-xl pl-11 pr-4 text-xs font-bold focus:border-primary outline-none"
+                              placeholder="Search"
+                           />
+                        </div>
+                        <button className="p-3 rounded-xl border border-glass-border bg-surface text-muted hover:text-primary transition-all">
+                           <SlidersHorizontal size={16} />
+                        </button>
+                        <button
+                           onClick={() => {
+                              setForm({
+                                 username: '', auth: 'manual', suspended: false, generatepass: false, password: '', forcechange: false,
+                                 firstname: '', lastname: '', email: '', visibility: '1', city: '', country: 'IN', timezone: '99', lang: 'en',
+                                 description: '', idnumber: '', institution: '', department: '', phone1: '', phone2: '', address: '',
+                                 profileimageurl: '', roleid: ''
+                              });
+                              if (data.roles.length === 0) fetch('http://localhost:4000/api/roles').then(r => r.json()).then(res => {
+                                 setData(prev => ({ ...prev, roles: Array.isArray(res) ? res : (res.roles || []) }));
+                              });
+                              setShowModal('Add User');
+                           }}
+                           className="bg-primary text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 transition-all flex items-center gap-2"
+                        >
+                           <Plus size={14} /> New User
+                        </button>
+                        <button className="px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition-all flex items-center gap-2">
+                           <Upload size={14} /> Bulk Upload
+                        </button>
+                        <button disabled className="px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest border border-glass-border text-muted/40 cursor-not-allowed">
+                           Enrol Users
+                        </button>
+                        <button className="p-3 rounded-xl border border-glass-border bg-surface text-muted hover:text-primary transition-all">
+                           <MoreVertical size={16} />
+                        </button>
+                     </div>
+
+                     <div className="flex flex-wrap items-center justify-between gap-4 px-2">
+                        <p className="text-sm font-bold text-main">
+                           Total Record Found: <span className="text-primary">{userPagination.total ?? 0}</span>
+                        </p>
+                        <label className="flex items-center gap-2 text-[10px] font-bold text-muted cursor-pointer">
+                           <input type="checkbox" checked={showMultitenant} onChange={e => setShowMultitenant(e.target.checked)} className="w-4 h-4 accent-primary" />
+                           Show Multitenant Records
+                        </label>
+                     </div>
+
+                     <div className="academy-card overflow-hidden rounded-[20px] border border-glass-border">
+                        <table className="w-full text-left border-collapse text-[11px]">
                            <thead>
-                              <tr className="border-b border-glass-border bg-white/5 uppercase text-[9px] font-black tracking-[0.2em] text-primary/60">
-                                 <th className="p-6">Name / Surname</th>
-                                 <th className="p-6">Email address</th>
-                                 <th className="p-6">Role</th>
-                                 <th className="p-6">Last access</th>
-                                 <th className="p-6 w-20"></th>
+                              <tr className="bg-surface/80 border-b border-glass-border uppercase text-[9px] font-black tracking-widest text-muted">
+                                 <th className="p-4 w-12">
+                                    <input
+                                       type="checkbox"
+                                       checked={manageUsers.length > 0 && selectedUserIds.length === manageUsers.length}
+                                       onChange={() => {
+                                          if (selectedUserIds.length === manageUsers.length) setSelectedUserIds([]);
+                                          else setSelectedUserIds(manageUsers.map(u => u.id));
+                                       }}
+                                       className="w-4 h-4 accent-primary"
+                                    />
+                                 </th>
+                                 <th className="p-4">
+                                    <button onClick={() => toggleUserSort('firstname')} className="flex items-center gap-1 hover:text-primary">
+                                       First Name <ChevronUp size={12} className={userSort.field === 'firstname' ? 'opacity-100' : 'opacity-30'} />
+                                    </button>
+                                 </th>
+                                 <th className="p-4">
+                                    <button onClick={() => toggleUserSort('lastname')} className="flex items-center gap-1 hover:text-primary">
+                                       Last Name <ChevronUp size={12} className={userSort.field === 'lastname' ? 'opacity-100' : 'opacity-30'} />
+                                    </button>
+                                 </th>
+                                 <th className="p-4">Email Address</th>
+                                 <th className="p-4">Course Enrolled</th>
+                                 <th className="p-4">Course Completed</th>
+                                 <th className="p-4">
+                                    <button onClick={() => toggleUserSort('lastaccess')} className="flex items-center gap-1 hover:text-primary">
+                                       Last Access <ChevronUp size={12} className={userSort.field === 'lastaccess' ? 'opacity-100' : 'opacity-30'} />
+                                    </button>
+                                 </th>
+                                 <th className="p-4">Status</th>
+                                 <th className="p-4 w-12"></th>
                               </tr>
                            </thead>
-                           <tbody className="divide-y divide-glass-border text-xs font-bold">
-                              {paginatedUsers?.map(u => (
-                                 <tr key={u.id} className="hover:bg-white/5 transition-colors group relative">
-                                    <td className="p-6 flex items-center gap-4"><div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-black italic overflow-hidden">{u.profileimageurl ? <img src={u.profileimageurl} className="w-full h-full object-cover" /> : u.firstname?.[0]}</div><span className="text-primary hover:underline cursor-pointer">{u.fullname}</span></td>
-                                    <td className="p-6 text-muted font-medium uppercase tracking-tighter">{u.email}</td>
-                                    <td className="p-6">
-                                       <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${u.role === 'admin' ? 'bg-red-500/10 text-red-500 border border-red-500/20' :
-                                          u.role === 'teacher' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' :
-                                             'bg-primary/10 text-primary border border-primary/20'
-                                          }`}>
-                                          {u.role || 'student'}
-                                       </span>
+                           <tbody className="divide-y divide-glass-border">
+                              {manageUsers.map(u => (
+                                 <tr key={u.id} className="hover:bg-primary/5 transition-colors text-xs font-bold">
+                                    <td className="p-4">
+                                       <input
+                                          type="checkbox"
+                                          checked={selectedUserIds.includes(u.id)}
+                                          onChange={() => {
+                                             if (selectedUserIds.includes(u.id)) setSelectedUserIds(selectedUserIds.filter(id => id !== u.id));
+                                             else setSelectedUserIds([...selectedUserIds, u.id]);
+                                          }}
+                                          className="w-4 h-4 accent-primary"
+                                       />
                                     </td>
-                                    <td className="p-6 text-muted font-medium">
-                                       {u.lastaccess ? (
-                                          <div className="flex flex-col space-y-1">
-                                             <span className="text-primary font-black text-xs">{formatRelativeTime(u.lastaccess)}</span>
-                                             <span className="text-[9px] uppercase tracking-widest opacity-60 flex items-center gap-1">
-                                                {new Date(u.lastaccess * 1000).toLocaleString('en-US', {
-                                                   day: '2-digit', month: 'short', year: 'numeric',
-                                                   hour: '2-digit', minute: '2-digit', hour12: true
-                                                })}
-                                             </span>
-                                          </div>
+                                    <td className="p-4 text-main">{u.firstname}</td>
+                                    <td className="p-4 text-main">{u.lastname}</td>
+                                    <td className="p-4 text-muted font-medium normal-case">{u.email}</td>
+                                    <td className="p-4">
+                                       <button className="text-primary font-black hover:underline">{u.coursesEnrolled ?? 0}</button>
+                                    </td>
+                                    <td className="p-4">
+                                       <span className="text-emerald-600 font-black">{u.coursesCompleted ?? 0}</span>
+                                    </td>
+                                    <td className="p-4 text-muted font-medium">{formatLastAccessDetailed(u.lastaccess)}</td>
+                                    <td className="p-4">
+                                       {u.status === 'active' ? (
+                                          <span className="inline-flex w-8 h-8 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
+                                             <Check size={16} />
+                                          </span>
                                        ) : (
-                                          <span className="text-[9px] font-black uppercase tracking-widest text-muted/60 bg-muted/10 px-3 py-1 rounded-full border border-muted/20">Never logged in</span>
+                                          <span className="inline-flex w-8 h-8 items-center justify-center rounded-full bg-red-500/15 text-red-500 border border-red-500/30">
+                                             <Minus size={16} />
+                                          </span>
                                        )}
                                     </td>
-                                    <td className="p-6 text-right relative">
-                                       <button onClick={() => setActiveMenu(activeMenu === u.id ? null : u.id)} className="p-3 hover:bg-white/10 rounded-xl transition-all"><MoreVertical size={18} className="text-muted" /></button>
+                                    <td className="p-4 text-right relative">
+                                       <button onClick={() => setActiveMenu(activeMenu === u.id ? null : u.id)} className="p-2 hover:bg-surface rounded-lg transition-all">
+                                          <MoreVertical size={16} className="text-muted" />
+                                       </button>
                                        {activeMenu === u.id && (
-                                          <div className="absolute right-16 top-1/2 -translate-y-1/2 z-50 bg-background border border-glass-border shadow-2xl rounded-2xl w-44 overflow-hidden animate-in zoom-in-95 duration-200">
-                                             <button onClick={() => { setShowModal('Edit User'); setEditingUser(u); setForm({ ...form, ...u }); setActiveMenu(null); }} className="w-full px-6 py-4 flex items-center gap-4 text-[9px] font-black uppercase tracking-widest hover:bg-primary transition-all text-left text-muted hover:text-white"><Edit2 size={14} /> Edit profile</button>
-                                             <button onClick={() => { setMainTab('permissions'); setSubTab('Assign system roles'); setRoleForm({ ...roleForm, userid: u.id }); setActiveMenu(null); }} className="w-full px-6 py-4 flex items-center gap-4 text-[9px] font-black uppercase tracking-widest hover:bg-primary transition-all text-left text-muted hover:text-white"><ShieldCheck size={14} /> Manage Role</button>
+                                          <div className="absolute right-10 top-1/2 -translate-y-1/2 z-50 bg-background border border-glass-border shadow-2xl rounded-2xl w-44 overflow-hidden">
+                                             <button onClick={() => { setShowModal('Edit User'); setEditingUser(u); setForm({ ...form, ...u, fullname: `${u.firstname} ${u.lastname}`.trim() }); setActiveMenu(null); }} className="w-full px-5 py-3 flex items-center gap-3 text-[9px] font-black uppercase tracking-widest hover:bg-primary text-left text-muted hover:text-white"><Edit2 size={14} /> Edit profile</button>
+                                             <button onClick={() => { setMainTab('permissions'); setSubTab('Assign system roles'); setRoleForm({ ...roleForm, userid: u.id }); setActiveMenu(null); }} className="w-full px-5 py-3 flex items-center gap-3 text-[9px] font-black uppercase tracking-widest hover:bg-primary text-left text-muted hover:text-white"><ShieldCheck size={14} /> Manage Role</button>
                                           </div>
                                        )}
                                     </td>
                                  </tr>
                               ))}
-                              {paginatedUsers?.length === 0 && (
+                              {manageUsers.length === 0 && !loading && (
                                  <tr>
-                                    <td colSpan="5" className="p-20 text-center">
-                                       <div className="flex flex-col items-center gap-4 opacity-30">
-                                          <Search size={48} />
-                                          <p className="text-[10px] font-black uppercase tracking-[0.2em]">No users match your criteria</p>
-                                       </div>
+                                    <td colSpan={9} className="p-16 text-center text-muted text-[10px] font-black uppercase tracking-widest">
+                                       No users found
                                     </td>
                                  </tr>
                               )}
@@ -1117,70 +1346,65 @@ export default function MasterAdminConsole() {
                         </table>
                      </div>
 
-                     {/* PAGINATION CONTROLS */}
-                     <div className="flex flex-col md:flex-row justify-between items-center gap-6 px-4 py-4">
-                        <div className="flex items-center gap-4 bg-surface/40 px-6 py-3 rounded-2xl border border-glass-border">
-                           <span className="text-[10px] font-black uppercase text-muted tracking-widest whitespace-nowrap">Show</span>
+                     <div className="flex flex-col md:flex-row justify-between items-center gap-3 px-1 py-1">
+                        <div className="flex items-center gap-3 bg-surface/40 px-4 py-2 rounded-xl border border-glass-border">
+                           <span className="text-[10px] font-black uppercase text-muted tracking-widest">Show</span>
                            <select
                               value={itemsPerPage}
-                              onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                              onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
                               className="bg-transparent text-[10px] font-black uppercase text-primary outline-none cursor-pointer"
                            >
-                              {[5, 10, 25, 50].map(v => <option key={v} value={v} className="bg-surface">{v}</option>)}
+                              {[10, 25, 50, 100].map(v => <option key={v} value={v} className="bg-surface">{v}</option>)}
                            </select>
-                           <span className="text-[10px] font-black uppercase text-muted tracking-widest whitespace-nowrap">per page</span>
+                           <span className="text-[10px] font-black uppercase text-muted tracking-widest">per page</span>
                         </div>
 
                         <div className="flex items-center gap-2">
                            <button
-                              disabled={currentPage === 1}
-                              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                              className="w-12 h-12 flex items-center justify-center rounded-2xl bg-surface/40 border border-glass-border text-muted hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                              disabled={currentPage <= 1}
+                              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                              className="w-10 h-10 flex items-center justify-center rounded-xl border border-glass-border text-muted hover:text-primary disabled:opacity-30"
                            >
-                              <ChevronDown className="rotate-90" size={18} />
+                              <ChevronLeft size={16} />
                            </button>
-
-                           <div className="flex items-center gap-2 bg-surface/40 px-3 py-2 rounded-2xl border border-glass-border">
-                              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                                 let pageNum;
-                                 if (totalPages <= 5) pageNum = i + 1;
-                                 else if (currentPage <= 3) pageNum = i + 1;
-                                 else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + i;
-                                 else pageNum = currentPage - 2 + i;
-
-                                 return (
-                                    <button
-                                       key={pageNum}
-                                       onClick={() => setCurrentPage(pageNum)}
-                                       className={`w-8 h-8 flex items-center justify-center rounded-xl text-[10px] font-black transition-all ${currentPage === pageNum ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'text-muted hover:text-main hover:bg-white/5'}`}
-                                    >
-                                       {pageNum}
-                                    </button>
-                                 );
-                              })}
-                           </div>
-
+                           {Array.from({ length: Math.min(5, userPagination.totalPages || 1) }, (_, i) => {
+                              const totalP = userPagination.totalPages || 1;
+                              let pageNum;
+                              if (totalP <= 5) pageNum = i + 1;
+                              else if (currentPage <= 3) pageNum = i + 1;
+                              else if (currentPage >= totalP - 2) pageNum = totalP - 4 + i;
+                              else pageNum = currentPage - 2 + i;
+                              return (
+                                 <button
+                                    key={pageNum}
+                                    onClick={() => setCurrentPage(pageNum)}
+                                    className={`w-9 h-9 rounded-lg text-[10px] font-black ${currentPage === pageNum ? 'bg-primary text-white' : 'text-muted hover:bg-surface border border-glass-border'}`}
+                                 >
+                                    {pageNum}
+                                 </button>
+                              );
+                           })}
                            <button
-                              disabled={currentPage === totalPages || totalPages === 0}
-                              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                              className="w-12 h-12 flex items-center justify-center rounded-2xl bg-surface/40 border border-glass-border text-muted hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                              disabled={currentPage >= (userPagination.totalPages || 1)}
+                              onClick={() => setCurrentPage(p => Math.min(userPagination.totalPages || 1, p + 1))}
+                              className="w-10 h-10 flex items-center justify-center rounded-xl border border-glass-border text-muted hover:text-primary disabled:opacity-30"
                            >
-                              <ChevronDown className="-rotate-90" size={18} />
+                              <ChevronRight size={16} />
                            </button>
                         </div>
 
-                        <div className="text-[10px] font-black uppercase text-muted tracking-widest bg-surface/40 px-6 py-3 rounded-2xl border border-glass-border">
-                           Showing <span className="text-primary">{Math.min(startIndex + 1, totalUsers)}</span> to <span className="text-primary">{Math.min(startIndex + itemsPerPage, totalUsers)}</span> of <span className="text-primary">{totalUsers}</span> accounts
-                        </div>
+                        <p className="text-[10px] font-black uppercase text-muted tracking-widest">
+                           Showing {userPagination.total ? (userPagination.page - 1) * userPagination.limit + 1 : 0}–{Math.min(userPagination.page * userPagination.limit, userPagination.total)} of {userPagination.total}
+                        </p>
                      </div>
                   </div>
                )}
 
                                {subTab === 'Learning Paths' && (
-                   <div className="space-y-6 animate-in fade-in duration-500">
-                      <div className="flex justify-between items-center bg-surface/60 p-6 rounded-3xl border border-glass-border shadow-sm mb-8">
+                   <div className="space-y-4 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+                      <div className="flex flex-wrap justify-between items-center gap-3 bg-surface/60 p-4 rounded-xl border border-glass-border shadow-sm">
                          <div>
-                            <h3 className="text-xl font-black italic uppercase tracking-tight text-main">Learning Paths</h3>
+                            <h3 className="text-lg font-black italic uppercase tracking-tight text-main">Learning Paths</h3>
                             <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1">Design and manage custom learning journeys for students</p>
                          </div>
                          <button 
@@ -1204,7 +1428,7 @@ export default function MasterAdminConsole() {
                                });
                                setSelectedPathCourses([]);
                             }} 
-                            className="bg-primary text-white px-8 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md hover:shadow-lg transition-all flex items-center gap-3"
+                            className="bg-primary text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md hover:shadow-lg transition-all flex items-center gap-2 shrink-0"
                          >
                             <Plus size={16} /> Create New Path
                          </button>
@@ -1214,55 +1438,57 @@ export default function MasterAdminConsole() {
                          <table className="w-full text-left border-collapse">
                             <thead>
                                <tr className="border-b border-glass-border bg-white/5 uppercase text-[9px] font-black tracking-[0.2em] text-primary/60">
-                                  <th className="p-6">Path Identity</th>
-                                  <th className="p-6">Curriculum</th>
-                                  <th className="p-6">Created At</th>
-                                  <th className="p-6 text-right">Actions</th>
+                                  <th className="p-4">Path Identity</th>
+                                  <th className="p-4">Curriculum</th>
+                                  <th className="p-4">Created At</th>
+                                  <th className="p-4 text-right">Actions</th>
                                </tr>
                             </thead>
                             <tbody className="divide-y divide-glass-border text-xs font-bold">
                                {data.learningpaths?.map(lp => (
                                   <tr key={lp.id} className="hover:bg-white/5 transition-colors group">
-                                     <td className="p-6">
-                                        <div className="flex items-center gap-4">
-                                           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
-                                              <MapPin size={20} />
+                                     <td className="p-4">
+                                        <div className="flex items-center gap-3">
+                                           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform shrink-0">
+                                              <MapPin size={18} />
                                            </div>
-                                           <div className="flex flex-col">
+                                           <div className="flex flex-col min-w-0">
                                               <span className="text-main uppercase tracking-tighter text-sm">{lp.name}</span>
                                               <span className="text-muted text-[10px] font-medium line-clamp-1 max-w-xs">{lp.description || 'No description provided'}</span>
                                            </div>
                                         </div>
                                      </td>
-                                     <td className="p-6">
+                                     <td className="p-4">
                                         <div className="flex items-center gap-2">
                                            <span className="px-3 py-1 bg-surface border border-glass-border rounded-full text-[9px] uppercase text-primary font-black">
                                               {lp.courses?.length || 0} Courses
                                            </span>
                                         </div>
                                      </td>
-                                     <td className="p-6 text-muted font-medium uppercase tracking-widest text-[9px]">
+                                     <td className="p-4 text-muted font-medium uppercase tracking-widest text-[9px]">
                                         {lp.createdAt ? new Date(lp.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
                                      </td>
-                                     <td className="p-6 text-right">
-                                        <div className="flex justify-end gap-2">
+                                     <td className="p-4 text-right">
+                                        <div className="flex justify-end gap-1.5">
                                            <button 
                                               onClick={() => {
                                                  setEditingPath(lp);
                                                  setNewPathForm({ name: lp.name, description: lp.description });
                                                  setSelectedPathCourses(lp.courses || []);
+                                                 setSelectedPathCohorts(lp.cohorts || []);
+                                                 setPathNotifications(lp.notifications || defaultPathNotifications());
                                                  setSubTab('Add Path');
-                                                 setPathStep(1);
+                                                 setPathStep(2);
                                               }} 
-                                              className="p-3 hover:bg-primary hover:text-white rounded-xl transition-all border border-glass-border text-muted"
+                                              className="p-2 hover:bg-primary hover:text-white rounded-lg transition-all border border-glass-border text-muted"
                                            >
-                                              <Edit2 size={16} />
+                                              <Edit2 size={14} />
                                            </button>
                                            <button 
                                               onClick={() => handleDeletePath(lp.id)} 
-                                              className="p-3 hover:bg-red-500 hover:text-white rounded-xl transition-all border border-glass-border text-muted"
+                                              className="p-2 hover:bg-red-500 hover:text-white rounded-lg transition-all border border-glass-border text-muted"
                                            >
-                                              <X size={16} />
+                                              <X size={14} />
                                            </button>
                                         </div>
                                      </td>
@@ -1270,7 +1496,7 @@ export default function MasterAdminConsole() {
                                ))}
                                {(!data.learningpaths || data.learningpaths.length === 0) && (
                                   <tr>
-                                     <td colSpan={4} className="p-20 text-center text-muted uppercase text-[10px] tracking-[0.3em]">
+                                     <td colSpan={4} className="p-12 text-center text-muted uppercase text-[10px] tracking-[0.3em]">
                                         No learning paths found in database
                                      </td>
                                   </tr>
@@ -1281,14 +1507,14 @@ export default function MasterAdminConsole() {
                    </div>
                 )}
                 {subTab === 'Add Path' && (
-                   <div className="space-y-6 animate-in fade-in duration-500">
-                    <div className="max-w-4xl mx-auto space-y-12 animate-in slide-in-from-bottom-8 duration-700 pb-20">
+                   <div className="space-y-4 animate-in fade-in duration-500 max-w-5xl mx-auto w-full">
+                    <div className="space-y-6 animate-in slide-in-from-bottom-8 duration-700 pb-8">
                        {/* Step Progress Bar */}
-                       <div className="flex items-center justify-between px-10">
+                       <div className="flex items-center justify-between px-2 sm:px-4">
                           {[1, 2, 3].map((step) => (
                              <Fragment key={step}>
-                                <div className="flex flex-col items-center gap-3 relative z-10">
-                                   <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg transition-all duration-500 ${pathStep >= step ? 'bg-primary text-white shadow-xl shadow-primary/30' : 'bg-surface border border-glass-border text-muted'}`}>
+                                <div className="flex flex-col items-center gap-2 relative z-10">
+                                   <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-black text-base transition-all duration-500 ${pathStep >= step ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-surface border border-glass-border text-muted'}`}>
                                       {pathStep > step ? <Check size={24} /> : step}
                                    </div>
                                    <span className={`text-[10px] font-black uppercase tracking-widest ${pathStep >= step ? 'text-primary' : 'text-muted'}`}>
@@ -1301,18 +1527,18 @@ export default function MasterAdminConsole() {
                        </div>
 
                        {pathStep === 1 && (
-                          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
+                          <div className="space-y-5 animate-in fade-in slide-in-from-bottom-8 duration-700">
                              {/* Header with Back Arrow */}
-                             <div className="flex items-center gap-4 mb-12">
-                                <button onClick={() => setSubTab('Learning Paths')} className="p-3 rounded-full bg-surface-hover hover:bg-primary/10 hover:text-primary transition-all border border-glass-border shadow-sm">
-                                   <ChevronLeft size={20} />
+                             <div className="flex items-center gap-3 mb-2">
+                                <button onClick={() => setSubTab('Learning Paths')} className="p-2 rounded-full bg-surface-hover hover:bg-primary/10 hover:text-primary transition-all border border-glass-border shadow-sm">
+                                   <ChevronLeft size={18} />
                                 </button>
-                                <h2 className="text-2xl font-black text-main tracking-tight italic uppercase">Create A Learning Path</h2>
+                                <h2 className="text-xl font-black text-main tracking-tight italic uppercase">Create A Learning Path</h2>
                              </div>
 
-                             <div className="bg-surface border border-glass-border rounded-[32px] p-10 shadow-2xl space-y-10">
+                             <div className="bg-surface border border-glass-border rounded-2xl p-5 sm:p-6 shadow-lg space-y-6">
                                 {/* Basic Info */}
-                                <div className="space-y-8">
+                                <div className="space-y-5">
                                    <div className="space-y-4">
                                       <div className="flex items-center gap-2">
                                          <label className="text-[11px] font-black uppercase text-main tracking-widest">Learning Path Name</label>
@@ -1342,8 +1568,8 @@ export default function MasterAdminConsole() {
                                    </div>
 
                                    {/* Dates Grid */}
-                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                      <div className="space-y-4">
+                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                      <div className="space-y-3">
                                          <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2">
                                                <label className="text-[11px] font-black uppercase text-main tracking-widest">Start Date</label>
@@ -1536,7 +1762,7 @@ export default function MasterAdminConsole() {
                        )}
 
                        {pathStep === 2 && (
-                          <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-700 pb-20">
+                          <div className="space-y-5 animate-in fade-in slide-in-from-right-8 duration-700 pb-6">
                              {/* Success Banner Mock */}
                              {pathSuccess && (
                                 <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 flex items-center justify-between animate-in fade-in slide-in-from-top-4 duration-500">
@@ -1556,12 +1782,12 @@ export default function MasterAdminConsole() {
                              </div>
 
                              {/* Tabs */}
-                             <div className="flex items-center gap-2 border-b border-glass-border pb-px overflow-x-auto no-scrollbar">
+                             <div className="flex items-center gap-1 border-b border-glass-border pb-px overflow-x-auto no-scrollbar -mx-1 px-1">
                                 {['Overview', 'Courses', 'Users', 'Cohorts', 'Notifications', 'Certificate Content'].map(tab => (
                                    <button 
                                       key={tab}
                                       onClick={() => setPathSubTab(tab)}
-                                      className={`px-8 py-4 text-[10px] font-black uppercase tracking-[0.2em] transition-all relative ${pathSubTab === tab ? 'bg-primary text-white rounded-t-xl' : 'text-muted hover:text-main bg-surface/40 hover:bg-surface border-x border-t border-transparent hover:border-glass-border rounded-t-xl mx-0.5'}`}
+                                      className={`px-4 py-2.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap transition-all relative shrink-0 ${pathSubTab === tab ? 'bg-primary text-white rounded-t-lg' : 'text-muted hover:text-main bg-surface/40 hover:bg-surface border-x border-t border-transparent hover:border-glass-border rounded-t-lg'}`}
                                    >
                                       {tab}
                                       {pathSubTab === tab && <div className="absolute -bottom-px left-0 right-0 h-1 bg-primary" />}
@@ -1571,8 +1797,8 @@ export default function MasterAdminConsole() {
 
                              {/* Tab Content: Overview */}
                              {pathSubTab === 'Overview' && (
-                                <div className="space-y-10 animate-in fade-in duration-500">
-                                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                                <div className="space-y-5 animate-in fade-in duration-500">
+                                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                                       {/* Left: Image Preview */}
                                       <div className="lg:col-span-4">
                                          <div className="academy-card aspect-video relative overflow-hidden rounded-[24px] border-none shadow-xl group">
@@ -1597,13 +1823,13 @@ export default function MasterAdminConsole() {
                                             <ManagementStatCard icon={<Users size={16} />} label="Users" value="0" color="sky" />
                                             
                                             <ManagementStatCard icon={<BookOpen size={16} />} label="Total Courses" value={selectedPathCourses.length} color="indigo" />
-                                            <ManagementStatCard icon={<Layers size={16} />} label="Total Cohorts" value="0" color="orange" />
+                                            <ManagementStatCard icon={<Layers size={16} />} label="Total Cohorts" value={data.cohorts?.length || selectedPathCohorts.length || 0} color="orange" />
                                             <ManagementStatCard icon={<ScrollText size={16} />} label="Required Courses" value="0" color="red" />
                                             <ManagementStatCard icon={<Users size={16} />} label="Total Users" value="0" color="teal" />
                                          </div>
-                                         <div className="mt-8">
-                                            <button className="px-12 py-3.5 bg-primary text-white rounded-xl font-black text-[10px] uppercase tracking-[0.25em] shadow-xl shadow-primary/20 hover:scale-105 transition-all flex items-center gap-3">
-                                               <Rocket size={16} /> Publish Path
+                                         <div className="mt-4">
+                                            <button className="px-6 py-2.5 bg-primary text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all flex items-center gap-2">
+                                               <Rocket size={14} /> Publish Path
                                             </button>
                                          </div>
                                       </div>
@@ -1612,7 +1838,7 @@ export default function MasterAdminConsole() {
                                    {/* Description Section */}
                                    <div className="space-y-4">
                                       <h3 className="text-[11px] font-black uppercase text-muted tracking-widest ml-1">Description</h3>
-                                      <div className="bg-surface border border-glass-border rounded-[24px] p-8 shadow-sm">
+                                      <div className="bg-surface border border-glass-border rounded-xl p-5 shadow-sm">
                                          <p className="text-xs font-bold text-main leading-relaxed italic opacity-80">
                                             {newPathForm.description || 'No description provided for this learning path.'}
                                          </p>
@@ -1620,17 +1846,17 @@ export default function MasterAdminConsole() {
                                    </div>
 
                                    {/* Properties Section */}
-                                   <div className="space-y-6">
+                                   <div className="space-y-3">
                                       <h3 className="text-[11px] font-black uppercase text-muted tracking-widest ml-1">Properties</h3>
-                                      <div className="bg-surface border border-glass-border rounded-[24px] overflow-hidden">
-                                         <div className="p-8 space-y-8">
+                                      <div className="bg-surface border border-glass-border rounded-xl overflow-hidden">
+                                         <div className="p-5 space-y-5">
                                             <div className="space-y-4">
                                                <label className="text-[10px] font-black uppercase text-muted tracking-widest">Location:</label>
                                                <div className="w-full h-14 bg-background/50 border border-glass-border rounded-xl px-6 flex items-center text-xs font-bold text-main">
                                                   {newPathForm.location || 'Not Specified'}
                                                </div>
                                             </div>
-                                            <div className="space-y-4 border-t border-glass-border pt-8">
+                                            <div className="space-y-3 border-t border-glass-border pt-5">
                                                <label className="text-[10px] font-black uppercase text-muted tracking-widest">Instructor:</label>
                                                <div className="w-full h-14 bg-background/50 border border-glass-border rounded-xl px-6 flex items-center text-xs font-bold text-main">
                                                   {newPathForm.instructor === '1' ? 'Admin User' : 'Not Assigned'}
@@ -1641,14 +1867,14 @@ export default function MasterAdminConsole() {
                                    </div>
 
                                    {/* Courses Section Section */}
-                                   <div className="space-y-6 pt-10 border-t border-glass-border">
+                                   <div className="space-y-3 pt-5 border-t border-glass-border">
                                       <div className="flex items-center gap-3">
                                          <h3 className="text-[11px] font-black uppercase text-main tracking-widest">Dashboard</h3>
                                          <button className="p-2 bg-surface border border-glass-border rounded-lg text-muted hover:text-primary transition-all">
                                             <Edit2 size={12} />
                                          </button>
                                       </div>
-                                      <div className="py-12 text-center">
+                                      <div className="py-8 text-center">
                                          <p className="text-[10px] font-black uppercase text-muted tracking-widest italic">There are no courses to the learning path</p>
                                          <button onClick={() => setPathSubTab('Courses')} className="mt-6 text-primary font-black text-[10px] uppercase tracking-widest hover:underline flex items-center gap-2 mx-auto">
                                             <Plus size={14} /> Add Courses Now
@@ -1664,7 +1890,7 @@ export default function MasterAdminConsole() {
                                    {!isAddingCourses ? (
                                       <div className="space-y-6">
                                          {/* List Header */}
-                                         <div className="flex flex-wrap items-center justify-between gap-4 bg-surface/40 p-6 rounded-2xl border border-glass-border">
+                                         <div className="flex flex-wrap items-center justify-between gap-2 bg-surface/40 p-3 rounded-xl border border-glass-border">
                                             <div className="relative flex-grow max-w-md">
                                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={16} />
                                                <input 
@@ -1729,7 +1955,7 @@ export default function MasterAdminConsole() {
                                                </table>
                                             </div>
                                          ) : (
-                                            <div className="py-12 px-6">
+                                            <div className="py-8 px-4 text-center">
                                                <p className="text-[10px] font-black uppercase text-muted tracking-widest italic">No Records Found.</p>
                                             </div>
                                          )}
@@ -1821,7 +2047,7 @@ export default function MasterAdminConsole() {
                                    {!isAddingUsers ? (
                                       <div className="space-y-6">
                                          {/* List Header */}
-                                         <div className="flex flex-wrap items-center justify-between gap-4 bg-surface/40 p-6 rounded-2xl border border-glass-border">
+                                         <div className="flex flex-wrap items-center justify-between gap-2 bg-surface/40 p-3 rounded-xl border border-glass-border">
                                             <div className="relative flex-grow max-w-md">
                                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={16} />
                                                <input 
@@ -1871,7 +2097,7 @@ export default function MasterAdminConsole() {
                                                </table>
                                             </div>
                                          ) : (
-                                            <div className="py-12 px-6">
+                                            <div className="py-8 px-4 text-center">
                                                <p className="text-[10px] font-black uppercase text-muted tracking-widest italic">No Records Found.</p>
                                             </div>
                                          )}
@@ -1958,146 +2184,262 @@ export default function MasterAdminConsole() {
 
                              {/* Tab Content: Cohorts */}
                              {pathSubTab === 'Cohorts' && (
-                                <div className="space-y-8 animate-in fade-in duration-500">
-                                   {!isAddingCohorts ? (
-                                      <div className="space-y-6">
-                                         {/* List Header */}
-                                         <div className="flex flex-wrap items-center justify-between gap-4 bg-surface/40 p-6 rounded-2xl border border-glass-border">
-                                            <div className="relative flex-grow max-w-md">
-                                               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={16} />
-                                               <input 
-                                                  type="text" 
-                                                  placeholder="Search Cohorts" 
-                                                  className="w-full h-11 bg-background/50 border border-glass-border rounded-xl pl-12 pr-4 text-xs font-bold focus:border-primary transition-all outline-none"
-                                               />
-                                            </div>
-                                            <button 
-                                               onClick={() => setIsAddingCohorts(true)}
-                                               className="bg-primary text-white px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 transition-all flex items-center gap-2"
-                                            >
-                                               Add Cohorts <Plus size={14} />
-                                            </button>
-                                         </div>
+                                <div className="space-y-6 animate-in fade-in duration-500">
+                                   <div className="flex flex-wrap items-center justify-between gap-2 bg-surface/40 p-3 rounded-xl border border-glass-border">
+                                      <div className="relative flex-grow max-w-md">
+                                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={16} />
+                                         <input
+                                            type="text"
+                                            value={cohortSearchQuery}
+                                            onChange={(e) => setCohortSearchQuery(e.target.value)}
+                                            placeholder="Search Cohorts"
+                                            className="w-full h-11 bg-background/50 border border-glass-border rounded-xl pl-12 pr-4 text-xs font-bold focus:border-primary transition-all outline-none"
+                                         />
+                                      </div>
+                                      <div className="flex items-center gap-3">
+                                         <button
+                                            onClick={() => setShowCohortModal(true)}
+                                            className="bg-primary text-white px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-105 transition-all flex items-center gap-2"
+                                         >
+                                            Add Cohorts <Plus size={14} />
+                                         </button>
+                                         <button
+                                            onClick={handleDeleteCohorts}
+                                            disabled={selectedCohortIds.length === 0}
+                                            className="px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest border border-glass-border bg-surface text-muted hover:text-red-500 hover:border-red-500/30 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                                         >
+                                            Delete <X size={14} />
+                                         </button>
+                                      </div>
+                                   </div>
 
-                                         {/* Cohorts Table */}
-                                         {selectedPathCohorts.length > 0 ? (
-                                            <div className="academy-card overflow-hidden rounded-[24px]">
-                                               <table className="w-full text-left border-collapse">
-                                                  <thead>
-                                                     <tr className="bg-surface border-b border-glass-border uppercase text-[9px] font-black tracking-widest text-muted">
-                                                        <th className="p-6">Cohort Name</th>
-                                                        <th className="p-6 text-right">Actions</th>
-                                                     </tr>
-                                                  </thead>
-                                                  <tbody className="divide-y divide-glass-border text-xs font-bold">
-                                                     {selectedPathCohorts.map(id => {
-                                                        const cohort = data.cohorts.find(c => c.id === id);
-                                                        return (
-                                                           <tr key={id} className="hover:bg-primary/5 transition-colors group">
-                                                              <td className="p-6 text-main uppercase italic tracking-tight">{cohort?.name || id}</td>
-                                                              <td className="p-6 text-right">
-                                                                 <button 
-                                                                    onClick={() => setSelectedPathCohorts(selectedPathCohorts.filter(cid => cid !== id))}
-                                                                    className="p-2 bg-surface border border-glass-border rounded-lg text-muted hover:text-red-500 transition-all"
-                                                                 >
-                                                                    <X size={12} />
-                                                                 </button>
-                                                              </td>
-                                                           </tr>
-                                                        );
-                                                     })}
-                                                  </tbody>
-                                               </table>
-                                            </div>
-                                         ) : (
-                                            <div className="py-12 px-6">
-                                               <p className="text-[10px] font-black uppercase text-muted tracking-widest italic">No Records Found.</p>
-                                            </div>
-                                         )}
+                                   {filteredCohorts.length > 0 ? (
+                                      <div className="academy-card overflow-hidden rounded-[24px]">
+                                         <table className="w-full text-left border-collapse">
+                                            <thead>
+                                               <tr className="bg-surface border-b border-glass-border uppercase text-[9px] font-black tracking-widest text-muted">
+                                                  <th className="p-4 w-12">
+                                                     <div
+                                                        onClick={() => {
+                                                           if (selectedCohortIds.length === filteredCohorts.length) setSelectedCohortIds([]);
+                                                           else setSelectedCohortIds(filteredCohorts.map(c => c.id));
+                                                        }}
+                                                        className={`w-5 h-5 rounded-[6px] border-2 flex items-center justify-center cursor-pointer transition-all ${selectedCohortIds.length === filteredCohorts.length && filteredCohorts.length > 0 ? 'bg-primary border-primary text-white' : 'border-glass-border'}`}
+                                                     >
+                                                        {selectedCohortIds.length === filteredCohorts.length && filteredCohorts.length > 0 && <Check size={12} />}
+                                                     </div>
+                                                  </th>
+                                                  <th className="p-6">Cohort Name</th>
+                                                  <th className="p-6">Enrollment Date</th>
+                                                  <th className="p-6">Users</th>
+                                               </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-glass-border text-xs font-bold">
+                                               {filteredCohorts.map(cohort => (
+                                                  <tr key={cohort.id} className={`hover:bg-primary/5 transition-colors ${selectedCohortIds.includes(cohort.id) ? 'bg-primary/5' : ''}`}>
+                                                     <td className="p-6">
+                                                        <div
+                                                           onClick={() => {
+                                                              if (selectedCohortIds.includes(cohort.id)) setSelectedCohortIds(selectedCohortIds.filter(id => id !== cohort.id));
+                                                              else setSelectedCohortIds([...selectedCohortIds, cohort.id]);
+                                                           }}
+                                                           className={`w-5 h-5 rounded-[6px] border-2 flex items-center justify-center cursor-pointer transition-all ${selectedCohortIds.includes(cohort.id) ? 'bg-primary border-primary text-white' : 'border-glass-border'}`}
+                                                        >
+                                                           {selectedCohortIds.includes(cohort.id) && <Check size={12} />}
+                                                        </div>
+                                                     </td>
+                                                     <td className="p-6 text-main uppercase italic tracking-tight">{cohort.name}</td>
+                                                     <td className="p-6 text-muted font-medium">
+                                                        <span className="inline-flex items-center gap-2">
+                                                           <Calendar size={14} className="text-primary/60" />
+                                                           {formatCohortDate(cohort)}
+                                                        </span>
+                                                     </td>
+                                                     <td className="p-4 text-main">{cohort.memberCount ?? 0}</td>
+                                                  </tr>
+                                               ))}
+                                            </tbody>
+                                         </table>
                                       </div>
                                    ) : (
-                                      /* Dual-Pane Cohort Picker Interface */
-                                      <div className="space-y-6 animate-in slide-in-from-bottom-8 duration-500">
-                                         <div className="flex items-center gap-3">
-                                            <button onClick={() => setIsAddingCohorts(false)} className="p-2 rounded-full bg-surface border border-glass-border hover:bg-primary/10 hover:text-primary transition-all">
-                                               <ChevronLeft size={16} />
-                                            </button>
-                                            <h3 className="text-sm font-black uppercase text-main italic tracking-tight">Add/Remove Cohorts</h3>
-                                         </div>
-
-                                         <div className="grid grid-cols-1 lg:grid-cols-11 gap-4 items-center">
-                                            <div className="lg:col-span-5 academy-card p-0 rounded-[20px] overflow-hidden flex flex-col h-[600px] border-none shadow-xl">
-                                               <div className="p-6 space-y-4 border-b border-glass-border">
-                                                  <h4 className="text-[10px] font-black uppercase text-muted tracking-widest">Selected Cohorts</h4>
-                                                  <div className="flex gap-2">
-                                                     <div className="relative flex-grow">
-                                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={14} />
-                                                        <input type="text" placeholder="Search" className="w-full h-11 bg-background/50 border border-glass-border rounded-lg pl-10 pr-4 text-xs font-bold focus:border-primary outline-none" />
-                                                     </div>
-                                                     <button className="px-4 h-11 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-black uppercase tracking-widest">Clear</button>
-                                                  </div>
-                                               </div>
-                                               <div className="flex-grow overflow-y-auto p-6 space-y-4 bg-surface/30 custom-scrollbar">
-                                                  <div className="space-y-2">
-                                                     {selectedPathCohorts.map(id => {
-                                                        const cohort = data.cohorts.find(c => c.id === id);
-                                                        return (
-                                                           <div key={id} className="text-xs font-bold text-main opacity-80 pl-4">{cohort?.name || id}</div>
-                                                        );
-                                                     })}
-                                                     {selectedPathCohorts.length === 0 && <p className="text-xs font-bold text-muted uppercase pl-4">None</p>}
-                                                  </div>
-                                               </div>
-                                            </div>
-
-                                            <div className="lg:col-span-1 flex flex-col items-center gap-4">
-                                               <button className="w-full py-3 bg-primary text-white rounded-lg font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20">Add</button>
-                                               <div className="flex flex-col items-center opacity-40">
-                                                  <ChevronUp size={16} />
-                                                  <ChevronDown size={16} />
-                                               </div>
-                                               <button className="w-full py-3 bg-primary text-white rounded-lg font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20">Remove</button>
-                                            </div>
-
-                                            <div className="lg:col-span-5 academy-card p-0 rounded-[20px] overflow-hidden flex flex-col h-[600px] border-none shadow-xl">
-                                               <div className="p-6 space-y-4 border-b border-glass-border">
-                                                  <h4 className="text-[10px] font-black uppercase text-muted tracking-widest">Available Cohorts</h4>
-                                                  <div className="flex gap-2">
-                                                     <div className="relative flex-grow">
-                                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={14} />
-                                                        <input type="text" placeholder="Search" className="w-full h-11 bg-background/50 border border-glass-border rounded-lg pl-10 pr-4 text-xs font-bold focus:border-primary outline-none" />
-                                                     </div>
-                                                     <button className="px-4 h-11 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-black uppercase tracking-widest">Clear</button>
-                                                  </div>
-                                               </div>
-                                               <div className="flex-grow overflow-y-auto p-6 space-y-4 bg-surface/30 custom-scrollbar">
-                                                  <div className="space-y-3">
-                                                     {data.cohorts?.filter(c => !selectedPathCohorts.includes(c.id)).map(cohort => (
-                                                        <div 
-                                                           key={cohort.id} 
-                                                           onClick={() => setSelectedPathCohorts([...selectedPathCohorts, cohort.id])}
-                                                           className="text-xs font-bold text-main opacity-80 pl-4 hover:text-primary cursor-pointer transition-colors"
-                                                        >
-                                                           {cohort.name}
-                                                        </div>
-                                                     ))}
-                                                  </div>
-                                               </div>
-                                            </div>
-                                         </div>
+                                      <div className="py-8 px-4 text-center">
+                                         <p className="text-[10px] font-black uppercase text-muted tracking-widest italic">No Records Found.</p>
                                       </div>
+                                   )}
+
+                                   {selectedPathCohorts.length > 0 && (
+                                      <p className="text-[10px] font-bold uppercase text-muted tracking-widest">
+                                         {selectedPathCohorts.length} cohort(s) linked to this learning path
+                                      </p>
                                    )}
                                 </div>
                              )}
 
-                             {/* Final placeholders */}
-                             {['Notifications', 'Certificate Content'].includes(pathSubTab) && (
+                             {/* Tab Content: Notifications */}
+                             {pathSubTab === 'Notifications' && (
+                                <div className="space-y-4 animate-in fade-in duration-500 pb-6">
+                                   {!editingPath?.id ? (
+                                      <div className="py-10 text-center bg-surface/20 rounded-xl border border-glass-border border-dashed">
+                                         <Bell size={40} className="mx-auto text-primary mb-4" />
+                                         <p className="text-[10px] font-black uppercase text-muted tracking-widest">Save the learning path first to configure email notifications.</p>
+                                      </div>
+                                   ) : (
+                                      <>
+                                         <NotificationSectionBar title="Enrollment" />
+                                         <div className="academy-card p-5 space-y-4 border border-glass-border rounded-xl">
+                                            <NotificationEnableRow
+                                               label="Email Template"
+                                               enabled={pathNotifications.enrollment?.enabled}
+                                               onEnabledChange={v => updateNotificationBlock('enrollment', { enabled: v })}
+                                            />
+                                            <EmailTemplateEditor
+                                               value={pathNotifications.enrollment?.body || ''}
+                                               onChange={body => updateNotificationBlock('enrollment', { body })}
+                                            />
+                                            <NotificationTagsFooter />
+                                         </div>
+
+                                         <NotificationSectionBar title="Expiration" />
+                                         <div className="academy-card p-5 space-y-4 border border-glass-border rounded-xl">
+                                            <NotificationEnableRow
+                                               label="Email Template"
+                                               enabled={pathNotifications.expiration?.enabled}
+                                               onEnabledChange={v => updateNotificationBlock('expiration', { enabled: v })}
+                                            />
+                                            <EmailTemplateEditor
+                                               value={pathNotifications.expiration?.body || ''}
+                                               onChange={body => updateNotificationBlock('expiration', { body })}
+                                            />
+                                            <NotificationTagsFooter />
+                                         </div>
+
+                                         <NotificationSectionBar title="Enrollment Reminder" />
+                                         <div className="academy-card p-5 space-y-4 border border-glass-border rounded-xl">
+                                            <EmailTemplateEditor
+                                               value={pathNotifications.enrollmentReminder?.body || ''}
+                                               onChange={body => updateNotificationBlock('enrollmentReminder', { body })}
+                                            />
+                                            <NotificationTagsFooter />
+                                            <input
+                                               type="text"
+                                               value={pathNotifications.enrollmentReminder?.subject || ''}
+                                               onChange={e => updateNotificationBlock('enrollmentReminder', { subject: e.target.value })}
+                                               className="w-full h-12 bg-background/50 border border-glass-border rounded-xl px-5 text-xs font-bold focus:border-primary outline-none"
+                                               placeholder="Email subject"
+                                            />
+                                            <div className="flex flex-wrap items-center gap-4">
+                                               <span className="text-[11px] font-black uppercase text-main tracking-widest">Days After Enrollment</span>
+                                               <NotificationEnableRow
+                                                  label="Enable"
+                                                  enabled={pathNotifications.enrollmentReminder?.enabled}
+                                                  onEnabledChange={v => updateNotificationBlock('enrollmentReminder', { enabled: v })}
+                                                  inline
+                                               />
+                                               <input
+                                                  type="number"
+                                                  min="0"
+                                                  disabled={!pathNotifications.enrollmentReminder?.enabled}
+                                                  value={pathNotifications.enrollmentReminder?.daysAfterEnrollment ?? ''}
+                                                  onChange={e => updateNotificationBlock('enrollmentReminder', { daysAfterEnrollment: parseInt(e.target.value, 10) || 0 })}
+                                                  className="w-24 h-11 bg-background/50 border border-glass-border rounded-xl px-4 text-xs font-bold focus:border-primary outline-none disabled:opacity-40"
+                                               />
+                                            </div>
+                                         </div>
+
+                                         <NotificationSectionBar title="Expiration Reminder" />
+                                         <div className="academy-card p-5 space-y-4 border border-glass-border rounded-xl">
+                                            <div className="flex flex-wrap items-center gap-4">
+                                               <span className="text-[11px] font-black uppercase text-main tracking-widest">Days Before Expiration</span>
+                                               <NotificationEnableRow
+                                                  label="Enable"
+                                                  enabled={pathNotifications.expirationReminder?.enabled}
+                                                  onEnabledChange={v => updateNotificationBlock('expirationReminder', { enabled: v })}
+                                                  inline
+                                               />
+                                               <input
+                                                  type="number"
+                                                  min="0"
+                                                  disabled={!pathNotifications.expirationReminder?.enabled}
+                                                  value={pathNotifications.expirationReminder?.daysBeforeExpiration ?? ''}
+                                                  onChange={e => updateNotificationBlock('expirationReminder', { daysBeforeExpiration: parseInt(e.target.value, 10) || 0 })}
+                                                  className="w-24 h-11 bg-background/50 border border-glass-border rounded-xl px-4 text-xs font-bold focus:border-primary outline-none disabled:opacity-40"
+                                               />
+                                            </div>
+                                            <span className="text-[11px] font-black uppercase text-main tracking-widest">Email Template</span>
+                                            <EmailTemplateEditor
+                                               value={pathNotifications.expirationReminder?.body || ''}
+                                               onChange={body => updateNotificationBlock('expirationReminder', { body })}
+                                            />
+                                            <NotificationTagsFooter />
+                                         </div>
+
+                                         <NotificationSectionBar title="Completion Reminder" />
+                                         <div className="academy-card p-5 space-y-4 border border-glass-border rounded-xl">
+                                            <div className="flex flex-wrap items-center gap-4">
+                                               <span className="text-[11px] font-black uppercase text-main tracking-widest">Day Frequency</span>
+                                               <NotificationEnableRow
+                                                  label="Enable"
+                                                  enabled={pathNotifications.completionReminder?.enabled}
+                                                  onEnabledChange={v => updateNotificationBlock('completionReminder', { enabled: v })}
+                                                  inline
+                                               />
+                                               <input
+                                                  type="number"
+                                                  min="0"
+                                                  disabled={!pathNotifications.completionReminder?.enabled}
+                                                  value={pathNotifications.completionReminder?.dayFrequency ?? ''}
+                                                  onChange={e => updateNotificationBlock('completionReminder', { dayFrequency: parseInt(e.target.value, 10) || 0 })}
+                                                  className="w-24 h-11 bg-background/50 border border-glass-border rounded-xl px-4 text-xs font-bold focus:border-primary outline-none disabled:opacity-40"
+                                               />
+                                            </div>
+                                            <span className="text-[11px] font-black uppercase text-main tracking-widest">Email Template</span>
+                                            <EmailTemplateEditor
+                                               value={pathNotifications.completionReminder?.body || ''}
+                                               onChange={body => updateNotificationBlock('completionReminder', { body })}
+                                            />
+                                            <NotificationTagsFooter />
+                                         </div>
+
+                                         <NotificationSectionBar title="Path Completion" />
+                                         <div className="academy-card p-5 space-y-4 border border-glass-border rounded-xl">
+                                            <NotificationEnableRow
+                                               label="Email Template"
+                                               enabled={pathNotifications.pathCompletion?.enabled}
+                                               onEnabledChange={v => updateNotificationBlock('pathCompletion', { enabled: v })}
+                                            />
+                                            <EmailTemplateEditor
+                                               value={pathNotifications.pathCompletion?.body || ''}
+                                               onChange={body => updateNotificationBlock('pathCompletion', { body })}
+                                            />
+                                            <NotificationTagsFooter />
+                                         </div>
+
+                                         <div className="flex flex-wrap justify-center gap-3 pt-4">
+                                            <button
+                                               onClick={handleSaveNotifications}
+                                               className="px-6 py-2.5 bg-primary text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all"
+                                            >
+                                               Save Changes
+                                            </button>
+                                            <button
+                                               onClick={handleCancelNotifications}
+                                               className="px-6 py-2.5 bg-surface border border-glass-border text-muted rounded-xl font-black text-[10px] uppercase tracking-widest hover:text-main transition-all"
+                                            >
+                                               Cancel
+                                            </button>
+                                         </div>
+                                      </>
+                                   )}
+                                </div>
+                             )}
+
+                             {pathSubTab === 'Certificate Content' && (
                                 <div className="py-20 text-center animate-in fade-in duration-500 bg-surface/20 rounded-[32px] border border-glass-border border-dashed">
                                    <div className="w-20 h-20 rounded-[32px] bg-primary/10 flex items-center justify-center text-primary mx-auto mb-6">
-                                      <Bell size={32} />
+                                      <ScrollText size={32} />
                                    </div>
-                                   <h3 className="text-xl font-black text-main uppercase italic tracking-tight">{pathSubTab} Module</h3>
-                                   <p className="text-muted text-[10px] font-bold uppercase tracking-widest mt-2 max-w-sm mx-auto leading-relaxed italic opacity-70">This module is currently being finalized. You will be able to manage {pathSubTab.toLowerCase()} for the "{newPathForm.name}" path here soon.</p>
+                                   <h3 className="text-xl font-black text-main uppercase italic tracking-tight">Certificate Content</h3>
+                                   <p className="text-muted text-[10px] font-bold uppercase tracking-widest mt-2 max-w-sm mx-auto leading-relaxed italic opacity-70">Certificate templates for "{newPathForm.name}" will be available here soon.</p>
                                    <button onClick={() => setPathSubTab('Overview')} className="mt-10 px-8 py-3 bg-surface border border-glass-border text-muted hover:text-primary rounded-xl font-black text-[10px] uppercase tracking-widest transition-all">Back to Overview</button>
                                 </div>
                              )}
@@ -2106,6 +2448,100 @@ export default function MasterAdminConsole() {
                     </div>
                  </div>
               )}
+
+               {subTab === 'Manage cohorts' && (
+                  <div className="space-y-4 animate-in fade-in duration-500 max-w-[1600px] mx-auto">
+                     <div className="flex flex-wrap justify-between items-center gap-3 bg-surface/60 p-4 rounded-xl border border-glass-border shadow-sm">
+                        <div>
+                           <h3 className="text-lg font-black italic uppercase tracking-tight text-main">Cohort Groups</h3>
+                           <p className="text-[10px] font-bold text-muted uppercase tracking-widest mt-1">Manage Moodle cohorts — Students, Teachers, Managers, etc.</p>
+                        </div>
+                     </div>
+
+                     <div className="flex flex-wrap items-center justify-between gap-2 bg-surface/40 p-3 rounded-xl border border-glass-border">
+                        <div className="relative flex-grow min-w-[200px] max-w-md">
+                           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={16} />
+                           <input
+                              type="text"
+                              value={cohortSearchQuery}
+                              onChange={(e) => setCohortSearchQuery(e.target.value)}
+                              placeholder="Search Cohorts"
+                              className="w-full h-11 bg-background/50 border border-glass-border rounded-xl pl-12 pr-4 text-xs font-bold focus:border-primary transition-all outline-none"
+                           />
+                        </div>
+                        <div className="flex items-center gap-3">
+                           <button
+                              onClick={() => setShowCohortModal(true)}
+                              className="bg-primary text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all flex items-center gap-2"
+                           >
+                              Add Cohorts <Plus size={14} />
+                           </button>
+                           <button
+                              onClick={handleDeleteCohorts}
+                              disabled={selectedCohortIds.length === 0}
+                              className="px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest border border-glass-border bg-surface text-muted hover:text-red-500 hover:border-red-500/30 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                           >
+                              Delete <X size={14} />
+                           </button>
+                        </div>
+                     </div>
+
+                     {filteredCohorts.length > 0 ? (
+                        <div className="academy-card overflow-hidden rounded-[24px]">
+                           <table className="w-full text-left border-collapse">
+                              <thead>
+                                 <tr className="bg-surface border-b border-glass-border uppercase text-[9px] font-black tracking-widest text-muted">
+                                    <th className="p-4 w-12">
+                                       <div
+                                          onClick={() => {
+                                             if (selectedCohortIds.length === filteredCohorts.length) setSelectedCohortIds([]);
+                                             else setSelectedCohortIds(filteredCohorts.map(c => c.id));
+                                          }}
+                                          className={`w-5 h-5 rounded-[6px] border-2 flex items-center justify-center cursor-pointer transition-all ${selectedCohortIds.length === filteredCohorts.length && filteredCohorts.length > 0 ? 'bg-primary border-primary text-white' : 'border-glass-border'}`}
+                                       >
+                                          {selectedCohortIds.length === filteredCohorts.length && filteredCohorts.length > 0 && <Check size={12} />}
+                                       </div>
+                                    </th>
+                                    <th className="p-4">Cohort Name</th>
+                                    <th className="p-4">Enrollment Date</th>
+                                    <th className="p-4">Users</th>
+                                 </tr>
+                              </thead>
+                              <tbody className="divide-y divide-glass-border text-xs font-bold">
+                                 {filteredCohorts.map(cohort => (
+                                    <tr key={cohort.id} className={`hover:bg-primary/5 transition-colors ${selectedCohortIds.includes(cohort.id) ? 'bg-primary/5' : ''}`}>
+                                       <td className="p-4">
+                                          <div
+                                             onClick={() => {
+                                                if (selectedCohortIds.includes(cohort.id)) setSelectedCohortIds(selectedCohortIds.filter(id => id !== cohort.id));
+                                                else setSelectedCohortIds([...selectedCohortIds, cohort.id]);
+                                             }}
+                                             className={`w-5 h-5 rounded-[6px] border-2 flex items-center justify-center cursor-pointer transition-all ${selectedCohortIds.includes(cohort.id) ? 'bg-primary border-primary text-white' : 'border-glass-border'}`}
+                                          >
+                                             {selectedCohortIds.includes(cohort.id) && <Check size={12} />}
+                                          </div>
+                                       </td>
+                                       <td className="p-4 text-main uppercase italic tracking-tight">{cohort.name}</td>
+                                       <td className="p-4 text-muted font-medium">
+                                          <span className="inline-flex items-center gap-2">
+                                             <Calendar size={14} className="text-primary/60" />
+                                             {formatCohortDate(cohort)}
+                                          </span>
+                                       </td>
+                                       <td className="p-4 text-main">{cohort.memberCount ?? 0}</td>
+                                    </tr>
+                                 ))}
+                              </tbody>
+                           </table>
+                        </div>
+                     ) : (
+                        <div className="py-8 px-4 text-center">
+                           <p className="text-[10px] font-black uppercase text-muted tracking-widest italic">No Records Found.</p>
+                        </div>
+                     )}
+                  </div>
+               )}
+
                 {subTab === 'Define roles' && (
                    <div className="space-y-8 animate-in fade-in duration-500">
                       <div className="academy-card overflow-hidden">
@@ -3379,6 +3815,47 @@ export default function MasterAdminConsole() {
             </div>
          </div>
 
+         {showCohortModal && (
+            <div className="fixed inset-0 z-[250] flex items-center justify-center p-6 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
+               <div className="bg-surface w-full max-w-lg border border-glass-border rounded-3xl shadow-3xl p-10 space-y-8">
+                  <div className="flex items-center justify-between">
+                     <h3 className="text-lg font-black italic uppercase text-main">Create Cohort</h3>
+                     <button onClick={() => setShowCohortModal(false)} className="p-2 rounded-xl border border-glass-border text-muted hover:text-red-500"><X size={18} /></button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                     {['Students', 'Teachers', 'Managers', 'Compliance Department'].map(preset => (
+                        <button
+                           key={preset}
+                           onClick={() => handleCreateCohort(preset)}
+                           className="px-4 py-2 bg-primary/10 text-primary border border-primary/20 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-primary hover:text-white transition-all"
+                        >
+                           {preset}
+                        </button>
+                     ))}
+                  </div>
+
+                  <div className="space-y-4">
+                     <CompactInput label="Cohort Name" value={cohortForm.name} onChange={v => setCohortForm({ ...cohortForm, name: v })} req />
+                     <div className="space-y-2">
+                        <label className="text-[9px] font-black uppercase text-muted tracking-widest">Description</label>
+                        <textarea
+                           value={cohortForm.description}
+                           onChange={e => setCohortForm({ ...cohortForm, description: e.target.value })}
+                           className="academy-input w-full h-24 bg-background/50 border border-glass-border p-4 text-xs font-bold focus:border-primary outline-none resize-none"
+                           placeholder="Optional description for this group"
+                        />
+                     </div>
+                  </div>
+
+                  <div className="flex gap-4 justify-end">
+                     <button onClick={() => setShowCohortModal(false)} className="px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest text-muted border border-glass-border">Cancel</button>
+                     <button onClick={() => handleCreateCohort()} className="bg-primary text-white px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary/20">Create Cohort</button>
+                  </div>
+               </div>
+            </div>
+         )}
+
          {/* â”€â”€ HIGH-DENSITY PROFESSIONAL USER PORTAL â”€â”€ */}
          {showModal && (
             <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/60 backdrop-blur-xl animate-in fade-in duration-300">
@@ -3643,8 +4120,8 @@ function CompactToggle({ label, checked, onChange }) {
 
 function StatCard({ icon, label, value, sub }) {
    return (
-      <div className="academy-card p-6 flex items-center gap-6 group hover:border-primary/50 transition-all">
-         <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform shadow-inner">
+      <div className="academy-card p-4 flex items-center gap-4 group hover:border-primary/50 transition-all">
+         <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform shadow-inner shrink-0">
             {icon}
          </div>
          <div>
@@ -3698,6 +4175,70 @@ function TopCourseRow({ name, views, enrolled, status }) {
    );
 }
 
+function NotificationSectionBar({ title }) {
+   return (
+      <div className="bg-surface/80 border border-glass-border rounded-lg px-4 py-2">
+         <h4 className="text-[10px] font-black uppercase tracking-widest text-main">{title}</h4>
+      </div>
+   );
+}
+
+function NotificationEnableRow({ label, enabled, onEnabledChange, inline }) {
+   return (
+      <div className={`flex items-center gap-3 ${inline ? '' : 'justify-between'}`}>
+         <span className="text-[11px] font-black uppercase text-main tracking-widest">{label}</span>
+         <label className="flex items-center gap-2 cursor-pointer">
+            <input
+               type="checkbox"
+               checked={!!enabled}
+               onChange={e => onEnabledChange(e.target.checked)}
+               className="w-4 h-4 accent-primary"
+            />
+            <span className="text-[10px] font-black uppercase text-main">Enable</span>
+         </label>
+      </div>
+   );
+}
+
+function NotificationTagsFooter() {
+   return (
+      <p className="text-[10px] font-bold text-muted leading-relaxed">
+         <span className="font-black uppercase tracking-widest text-main/70">Tags to be used: </span>
+         {NOTIFICATION_TAGS.join(', ')}
+      </p>
+   );
+}
+
+function EmailTemplateEditor({ value, onChange }) {
+   return (
+      <div className="border border-glass-border rounded-2xl overflow-hidden shadow-inner bg-background/20">
+         <div className="bg-surface border-b border-glass-border p-2 flex flex-wrap gap-1">
+            <ToolbarBtn icon={<Undo size={14} />} />
+            <div className="w-px h-6 bg-glass-border mx-1" />
+            <ToolbarBtn icon={<Type size={14} />} dropdown />
+            <ToolbarBtn icon={<Bold size={14} />} />
+            <ToolbarBtn icon={<Italic size={14} />} />
+            <div className="w-px h-6 bg-glass-border mx-1" />
+            <ToolbarBtn icon={<List size={14} />} />
+            <ToolbarBtn icon={<ListOrdered size={14} />} />
+            <div className="w-px h-6 bg-glass-border mx-1" />
+            <ToolbarBtn icon={<Link size={14} />} />
+            <ToolbarBtn icon={<Scissors size={14} />} />
+            <div className="w-px h-6 bg-glass-border mx-1" />
+            <ToolbarBtn icon={<FileImage size={14} />} />
+            <ToolbarBtn icon={<Video size={14} />} />
+            <ToolbarBtn icon={<Accessibility size={14} />} />
+         </div>
+         <textarea
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            className="w-full min-h-[140px] bg-background/30 p-4 text-xs font-bold focus:outline-none resize-y"
+            placeholder="Compose email template..."
+         />
+      </div>
+   );
+}
+
 function ToolbarBtn({ icon, dropdown }) {
    return (
       <button className="p-2 hover:bg-background/50 rounded-lg text-muted hover:text-primary transition-all flex items-center gap-1 border border-transparent hover:border-glass-border">
@@ -3707,6 +4248,29 @@ function ToolbarBtn({ icon, dropdown }) {
    );
 }
 
+
+function ManageUserStatCard({ label, value, icon, tone }) {
+   const tones = {
+      blue: 'bg-sky-500/15 text-sky-600 border-sky-500/20',
+      purple: 'bg-violet-500/15 text-violet-600 border-violet-500/20',
+      orange: 'bg-orange-500/15 text-orange-600 border-orange-500/20',
+      green: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/20',
+      amber: 'bg-amber-500/15 text-amber-600 border-amber-500/20',
+   };
+   return (
+      <div className="academy-card p-4 flex items-center justify-between gap-3 border border-glass-border rounded-xl">
+         <div className="min-w-0">
+            <p className="text-2xl font-black text-main leading-none tabular-nums">{value}</p>
+            <p className="text-[10px] font-bold text-muted mt-1.5 flex items-center gap-1">
+               {label} <Info size={12} className="opacity-40" />
+            </p>
+         </div>
+         <div className={`w-10 h-10 rounded-full flex items-center justify-center border shrink-0 ${tones[tone] || tones.blue}`}>
+            {icon}
+         </div>
+      </div>
+   );
+}
 
 function ManagementStatCard({ icon, label, value, color }) {
    const colors = {

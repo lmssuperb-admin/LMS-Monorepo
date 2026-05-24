@@ -307,6 +307,91 @@ class MoodleService {
     // For now, return empty or try to resolve via bridge if we have a handler
     return [];
   }
+
+  // ------------------ COHORTS ------------------
+
+  _arrayParams(key, values) {
+    const params = {};
+    values.forEach((value, index) => {
+      params[`${key}[${index}]`] = value;
+    });
+    return params;
+  }
+
+  async getCohorts(search = '') {
+    const raw = await this.request('core_cohort_get_cohorts', {});
+    const list = Array.isArray(raw) ? raw : [];
+
+    const filtered = search
+      ? list.filter(c =>
+          c.name?.toLowerCase().includes(search.toLowerCase()) ||
+          c.idnumber?.toLowerCase().includes(search.toLowerCase())
+        )
+      : list;
+
+    if (!filtered.length) return [];
+
+    const memberData = await this.request('core_cohort_get_cohort_members', {
+      ...this._arrayParams('cohortids', filtered.map(c => c.id)),
+    });
+
+    const memberCounts = {};
+    (memberData || []).forEach(entry => {
+      memberCounts[entry.cohortid] = entry.userids?.length || 0;
+    });
+
+    return filtered.map(cohort => ({
+      id: cohort.id,
+      name: cohort.name,
+      idnumber: cohort.idnumber,
+      description: cohort.description || '',
+      visible: cohort.visible,
+      memberCount: memberCounts[cohort.id] || 0,
+      timecreated: cohort.timecreated || null,
+      timemodified: cohort.timemodified || null,
+    }));
+  }
+
+  async createCohort({ name, description = '', idnumber }) {
+    const safeIdnumber =
+      idnumber ||
+      `${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}`;
+
+    const created = await this.request('core_cohort_create_cohorts', {
+      'cohorts[0][categorytype][type]': 'system',
+      'cohorts[0][categorytype][value]': '0',
+      'cohorts[0][name]': name,
+      'cohorts[0][idnumber]': safeIdnumber,
+      'cohorts[0][description]': description,
+      'cohorts[0][descriptionformat]': 1,
+      'cohorts[0][visible]': 1,
+    });
+
+    const cohort = Array.isArray(created) ? created[0] : created;
+    return {
+      ...cohort,
+      memberCount: 0,
+      timecreated: Math.floor(Date.now() / 1000),
+    };
+  }
+
+  async deleteCohorts(cohortids) {
+    const ids = cohortids.map(id => parseInt(id, 10)).filter(Boolean);
+    return this.request('core_cohort_delete_cohorts', {
+      ...this._arrayParams('cohortids', ids),
+    });
+  }
+
+  async addCohortMembers(cohortid, userids) {
+    const params = {};
+    userids.forEach((userid, index) => {
+      params[`members[${index}][cohorttype][type]`] = 'id';
+      params[`members[${index}][cohorttype][value]`] = cohortid;
+      params[`members[${index}][usertype][type]`] = 'id';
+      params[`members[${index}][usertype][value]`] = parseInt(userid, 10);
+    });
+    return this.request('core_cohort_add_cohort_members', params);
+  }
 }
 
 module.exports = new MoodleService();

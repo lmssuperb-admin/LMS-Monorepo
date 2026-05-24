@@ -9,6 +9,7 @@ const userRoutes = require('./routes/users');
 const systemRoutes = require('./routes/system');
 const roleRoutes = require('./routes/roles');
 const learningPathRoutes = require('./routes/learningpaths');
+const cohortRoutes = require('./routes/cohorts');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -30,6 +31,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/learningpaths', learningPathRoutes);
+app.use('/api/cohorts', cohortRoutes);
 
 // Root route
 app.get('/', (req, res) => {
