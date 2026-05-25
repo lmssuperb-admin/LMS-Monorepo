@@ -56,6 +56,15 @@ if (hasGoogleOAuth) {
 
 const authSecret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
 
+/** Vercel sets VERCEL_URL automatically; use it when NEXTAUTH_URL is not set. */
+function resolveNextAuthUrl() {
+  if (process.env.NEXTAUTH_URL) return process.env.NEXTAUTH_URL.replace(/\/$/, '');
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return undefined;
+}
+
+const nextAuthUrl = resolveNextAuthUrl();
+
 if (process.env.NODE_ENV === 'production' && !authSecret) {
   console.error(
     '[NextAuth] NEXTAUTH_SECRET is missing. Set it in Vercel environment variables and redeploy.'
@@ -87,6 +96,5 @@ export const authOptions = {
     error: "/login",
   },
   secret: authSecret,
-  // Required on Vercel when NEXTAUTH_URL is not set (NextAuth v4)
-  ...(process.env.NEXTAUTH_URL ? { url: process.env.NEXTAUTH_URL } : {}),
+  ...(nextAuthUrl ? { url: nextAuthUrl } : {}),
 };
