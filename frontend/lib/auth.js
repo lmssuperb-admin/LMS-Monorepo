@@ -54,6 +54,14 @@ if (hasGoogleOAuth) {
   );
 }
 
+const authSecret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+
+if (process.env.NODE_ENV === 'production' && !authSecret) {
+  console.error(
+    '[NextAuth] NEXTAUTH_SECRET is missing. Set it in Vercel environment variables and redeploy.'
+  );
+}
+
 export const authOptions = {
   providers,
   callbacks: {
@@ -78,6 +86,7 @@ export const authOptions = {
     signIn: "/login",
     error: "/login",
   },
-  secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
-  trustHost: true,
+  secret: authSecret,
+  // Required on Vercel when NEXTAUTH_URL is not set (NextAuth v4)
+  ...(process.env.NEXTAUTH_URL ? { url: process.env.NEXTAUTH_URL } : {}),
 };

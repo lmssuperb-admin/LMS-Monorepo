@@ -1,8 +1,9 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import { signIn, getSession, useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Lock, User, ArrowRight, Sparkles, AlertCircle, Globe, Loader2 } from 'lucide-react';
+import { getAuthErrorMessage, isGoogleOAuthEnabled } from '@/lib/authErrors';
 
 function roleHome(role) {
   if (role === 'admin') return '/admin';
@@ -25,13 +26,37 @@ function resolvePostLoginPath(session) {
 }
 
 export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-10 h-10 text-primary animate-spin" />
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const { data: session, status } = useSession();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+  const searchParams = useSearchParams();
   const didRedirect = useRef(false);
+  const googleEnabled = isGoogleOAuthEnabled();
+
+  useEffect(() => {
+    const err = searchParams.get('error');
+    if (err) {
+      setError(getAuthErrorMessage(err));
+      router.replace('/login', { scroll: false });
+    }
+  }, [searchParams, router]);
 
   useEffect(() => {
     if (status !== 'authenticated' || didRedirect.current) return;
@@ -52,7 +77,7 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError('Invalid Moodle credentials. Please try again.');
+        setError(getAuthErrorMessage(result.error));
         setLoading(false);
         return;
       }
@@ -70,6 +95,12 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = () => {
+    if (!googleEnabled) {
+      setError(
+        'Google sign-in is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel, or use Moodle credentials.'
+      );
+      return;
+    }
     signIn('google', { callbackUrl: '/student' });
   };
 
@@ -105,19 +136,24 @@ export default function LoginPage() {
             <p className="text-[var(--text-muted)] mt-1 font-medium uppercase tracking-widest text-[9px]">Portal Access</p>
           </div>
 
-          <button
-            onClick={handleGoogleLogin}
-            className="w-full mb-4 py-3.5 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-gray-100 transition-all shadow-lg active:scale-95 text-sm"
-          >
-            <Globe size={18} className="text-blue-500" />
-            <span>Continue with Google</span>
-          </button>
+          {googleEnabled && (
+            <>
+              <button
+                type="button"
+                onClick={handleGoogleLogin}
+                className="w-full mb-4 py-3.5 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-gray-100 transition-all shadow-lg active:scale-95 text-sm"
+              >
+                <Globe size={18} className="text-blue-500" />
+                <span>Continue with Google</span>
+              </button>
 
-          <div className="flex items-center gap-4 mb-6">
-            <div className="flex-grow h-[1px] bg-[rgba(255,255,255,0.08)]"></div>
-            <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-widest">Or Use Credentials</span>
-            <div className="flex-grow h-[1px] bg-[rgba(255,255,255,0.08)]"></div>
-          </div>
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex-grow h-[1px] bg-[rgba(255,255,255,0.08)]"></div>
+                <span className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-widest">Or Use Credentials</span>
+                <div className="flex-grow h-[1px] bg-[rgba(255,255,255,0.08)]"></div>
+              </div>
+            </>
+          )}
 
           {error && (
             <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-100 text-sm">
