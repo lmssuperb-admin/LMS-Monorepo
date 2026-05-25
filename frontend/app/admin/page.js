@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 
+
 const AdminConsole = dynamic(() => import('./AdminConsole'), {
   ssr: false,
   loading: () => (
