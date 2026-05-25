@@ -44,10 +44,18 @@ router.delete('/', async (req, res) => {
 
 router.post('/:id/members', async (req, res) => {
   try {
+    const cohortStore = require('../services/cohortStore');
     const moodleService = require('../services/moodleService');
     const userids = req.body.userids || [];
-    await moodleService.addCohortMembers(parseInt(req.params.id, 10), userids);
-    res.json({ success: true });
+    const cohortId = req.params.id;
+
+    if (cohortStore.isLocalId(cohortId)) {
+      cohortStore.addMembers(cohortId, userids);
+      return res.json({ success: true, source: 'local' });
+    }
+
+    await moodleService.addCohortMembers(parseInt(cohortId, 10), userids);
+    res.json({ success: true, source: 'moodle' });
   } catch (err) {
     res.status(500).json({
       error: err.message,

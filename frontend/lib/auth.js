@@ -61,6 +61,7 @@ export const authOptions = {
       if (user) {
         token.role = user.role;
         token.moodleToken = user.moodleToken;
+        token.id = user.id;
       }
       return token;
     },
@@ -68,12 +69,14 @@ export const authOptions = {
       if (session?.user) {
         session.user.role = token.role;
         session.user.moodleToken = token.moodleToken;
+        session.user.id = token.id;
       }
       return session;
     },
   },
   pages: {
     signIn: "/login",
+    error: "/login",
   },
   secret: process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET,
   trustHost: true,

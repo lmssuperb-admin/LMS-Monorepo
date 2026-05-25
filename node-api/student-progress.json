@@ -1,0 +1,27 @@
+{
+  "5": {
+    "courses": {
+      "54": {
+        "courseId": 54,
+        "courseName": "video and pdf",
+        "startedAt": "2026-05-25T07:34:02.635Z",
+        "lastActivityAt": "2026-05-25T07:34:18.865Z",
+        "completedAt": null,
+        "source": "recommended",
+        "timeSpentSeconds": 30,
+        "completedModules": [
+          "0_0_71"
+        ],
+        "moduleTimes": {
+          "0_0_71": {
+            "startedAt": "2026-05-25T07:34:07.275Z",
+            "completedAt": "2026-05-25T07:34:18.865Z",
+            "seconds": 30,
+            "lastViewedAt": "2026-05-25T07:34:07.275Z"
+          }
+        },
+        "totalModules": 2
+      }
+    }
+  }
+}

@@ -1,15 +1,43 @@
 'use client';
-import { useState } from 'react';
-import { signIn } from 'next-auth/react';
+import { useState, useEffect, useRef } from 'react';
+import { signIn, getSession, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Lock, User, ArrowRight, Sparkles, AlertCircle, Globe } from 'lucide-react';
+import { Lock, User, ArrowRight, Sparkles, AlertCircle, Globe, Loader2 } from 'lucide-react';
+
+function roleHome(role) {
+  if (role === 'admin') return '/admin';
+  if (role === 'teacher' || role === 'editingteacher') return '/teacher';
+  return '/student';
+}
+
+function resolvePostLoginPath(session) {
+  if (typeof window === 'undefined') return roleHome(session?.user?.role);
+  const raw = new URLSearchParams(window.location.search).get('callbackUrl');
+  if (raw) {
+    try {
+      const path = raw.startsWith('http') ? new URL(raw).pathname : raw;
+      if (path && path !== '/login' && path !== '/') return path;
+    } catch {
+      if (raw.startsWith('/') && raw !== '/login') return raw;
+    }
+  }
+  return roleHome(session?.user?.role);
+}
 
 export default function LoginPage() {
+  const { data: session, status } = useSession();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+  const didRedirect = useRef(false);
+
+  useEffect(() => {
+    if (status !== 'authenticated' || didRedirect.current) return;
+    didRedirect.current = true;
+    router.replace(resolvePostLoginPath(session));
+  }, [status, session, router]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -23,13 +51,18 @@ export default function LoginPage() {
         redirect: false,
       });
 
-      if (result.error) {
+      if (result?.error) {
         setError('Invalid Moodle credentials. Please try again.');
-      } else {
-        router.push('/');
-        router.refresh();
+        setLoading(false);
+        return;
       }
-    } catch (err) {
+
+      const freshSession = await getSession();
+      if (freshSession) {
+        didRedirect.current = true;
+        router.replace(resolvePostLoginPath(freshSession));
+      }
+    } catch {
       setError('System authentication error. Please contact admin.');
     } finally {
       setLoading(false);
@@ -37,18 +70,33 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = () => {
-    signIn('google', { callbackUrl: '/' });
+    signIn('google', { callbackUrl: '/student' });
   };
+
+  if (status === 'loading' || (status === 'authenticated' && didRedirect.current)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (status === 'authenticated') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-[var(--background)]">
-      {/* Decorative Orbs */}
       <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/20 rounded-full blur-[120px] animate-pulse"></div>
       <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-secondary/10 rounded-full blur-[120px]"></div>
 
       <div className="w-full max-w-[420px] relative z-10 scale-[0.95] md:scale-100">
         <div className="bg-[rgba(255,255,255,0.03)] backdrop-blur-3xl border border-[rgba(255,255,255,0.08)] rounded-[32px] p-8 shadow-2xl">
-          
+
           <div className="flex flex-col items-center mb-6">
             <div className="w-14 h-14 bg-gradient-to-br from-[#6366f1] to-[#a855f7] rounded-2xl flex items-center justify-center shadow-xl shadow-[#6366f130] mb-4">
               <Sparkles size={28} className="text-white" />
@@ -57,8 +105,7 @@ export default function LoginPage() {
             <p className="text-[var(--text-muted)] mt-1 font-medium uppercase tracking-widest text-[9px]">Portal Access</p>
           </div>
 
-          {/* Social Login */}
-          <button 
+          <button
             onClick={handleGoogleLogin}
             className="w-full mb-4 py-3.5 bg-white text-black rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-gray-100 transition-all shadow-lg active:scale-95 text-sm"
           >
@@ -84,8 +131,8 @@ export default function LoginPage() {
               <label className="text-xs font-bold uppercase tracking-widest text-[var(--text-muted)] ml-1">Username</label>
               <div className="relative group">
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-[#6366f1] transition-colors" size={18} />
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -99,8 +146,8 @@ export default function LoginPage() {
               <label className="text-xs font-bold uppercase tracking-widest text-[var(--text-muted)] ml-1">Password</label>
               <div className="relative group">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-[#6366f1] transition-colors" size={18} />
-                <input 
-                  type="password" 
+                <input
+                  type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -110,12 +157,12 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <button 
+            <button
               disabled={loading}
-              type="submit" 
+              type="submit"
               className="w-full py-4 bg-gradient-to-r from-[#6366f1] to-[#a855f7] text-white rounded-2xl font-bold shadow-lg shadow-[#6366f130] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
             >
-              {loading ? "Authenticating..." : (
+              {loading ? 'Authenticating...' : (
                 <>Sign In Securely <ArrowRight size={20} /></>
               )}
             </button>

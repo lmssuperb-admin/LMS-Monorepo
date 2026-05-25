@@ -25,6 +25,10 @@ export default function Navbar() {
 
   if (!session) return null;
 
+  const role = session.user?.role || 'student';
+  const homeHref =
+    role === 'admin' ? '/admin' : role === 'teacher' || role === 'editingteacher' ? '/teacher' : '/student';
+
   const handleLogout = async () => {
     await signOut({ callbackUrl: '/login' });
   };
@@ -35,7 +39,7 @@ export default function Navbar() {
       {/* Brand Section */}
       <div 
         className="flex items-center gap-3 cursor-pointer group" 
-        onClick={() => router.push('/')}
+        onClick={() => router.push(homeHref)}
       >
         <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center text-white shadow-lg shadow-primary/20 group-hover:scale-105 group-hover:rotate-3 transition-all duration-500">
            <span className="font-black text-2xl italic">A</span>

@@ -35,7 +35,9 @@ function createCohort({ name, description = '', idnumber }) {
     description,
     visible: true,
     memberCount: 0,
+    memberIds: [],
     timecreated: Math.floor(Date.now() / 1000),
+    enrollmentDate: Math.floor(Date.now() / 1000),
     source: 'local',
   };
 
@@ -55,9 +57,23 @@ function isLocalId(id) {
   return String(id).startsWith('local_');
 }
 
+function addMembers(cohortId, userids) {
+  const cohorts = getCohorts();
+  const cohort = cohorts.find(c => String(c.id) === String(cohortId));
+  if (!cohort) throw new Error('Cohort not found');
+
+  const ids = userids.map(id => parseInt(id, 10)).filter(Boolean);
+  const set = new Set([...(cohort.memberIds || []), ...ids]);
+  cohort.memberIds = Array.from(set);
+  cohort.memberCount = cohort.memberIds.length;
+  saveCohorts(cohorts);
+  return cohort;
+}
+
 module.exports = {
   getCohorts,
   createCohort,
   deleteCohorts,
   isLocalId,
+  addMembers,
 };

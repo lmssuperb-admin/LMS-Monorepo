@@ -10,6 +10,7 @@ const systemRoutes = require('./routes/system');
 const roleRoutes = require('./routes/roles');
 const learningPathRoutes = require('./routes/learningpaths');
 const cohortRoutes = require('./routes/cohorts');
+const progressRoutes = require('./routes/progress');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -32,6 +33,7 @@ app.use('/api/system', systemRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/learningpaths', learningPathRoutes);
 app.use('/api/cohorts', cohortRoutes);
+app.use('/api/progress', progressRoutes);
 
 // Root route
 app.get('/', (req, res) => {

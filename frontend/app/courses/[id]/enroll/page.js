@@ -1,6 +1,12 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import {
+  fetchRecommendedIds,
+  trackLearningEvent,
+  countCurriculumModules,
+} from '@/lib/learningProgress';
 import { 
   MessageSquare, 
   Layers, 
@@ -23,10 +29,13 @@ import {
   Video
 } from 'lucide-react';
 import Image from 'next/image';
+import { apiUrl } from '@/lib/apiBase';
+import { isNumericCourseId, normalizeCurriculumSections, STATIC_DEMO_CURRICULUM } from '@/lib/courseContent';
 
 export default function CourseEnrollmentPage() {
   const router = useRouter();
   const { id } = useParams();
+  const { data: session } = useSession();
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEnrolled, setIsEnrolled] = useState(false);
@@ -39,16 +48,29 @@ export default function CourseEnrollmentPage() {
 
   const fetchCourseDetails = async () => {
     try {
-      const res = await fetch(`http://localhost:4000/api/courses/${id}`);
-      const data = await res.json();
-      
+      let fullname = 'Course';
+      let curriculum = STATIC_DEMO_CURRICULUM;
+
+      if (isNumericCourseId(id)) {
+        const metaRes = await fetch(apiUrl('/courses'));
+        const all = await metaRes.json();
+        const meta = (Array.isArray(all) ? all : []).find(c => String(c.id) === String(id));
+        if (meta) fullname = meta.fullname || meta.shortname || fullname;
+
+        const res = await fetch(apiUrl(`/courses/${id}`));
+        const data = await res.json();
+        if (!data?.error) {
+          curriculum = normalizeCurriculumSections(data, fullname);
+        }
+      }
+
       setCourse({
         id: id,
-        fullname: data?.[0]?.name || "POSH Compliance",
-        shortname: "POSH",
-        summary: "This course has an ILT presentation for the POSH course, a Policy Handout, and forms. It covers essential guidelines for preventing sexual harassment in the workplace.",
+        fullname,
+        shortname: fullname,
+        summary: "Review the course outline and enroll to access all modules and activities.",
         image: "/posh_banner.png",
-        curriculum: data, // Store curriculum from API
+        curriculum,
         features: [
           { icon: <MessageSquare size={18} className="text-emerald-500" />, label: "Forum", count: "01" },
           { icon: <Layers size={18} className="text-blue-500" />, label: "Other", count: "14" },
@@ -64,10 +86,22 @@ export default function CourseEnrollmentPage() {
     }
   };
 
-  const handleEnroll = () => {
+  const handleEnroll = async () => {
+    const userId = session?.user?.id;
+    if (userId && course) {
+      const recIds = await fetchRecommendedIds();
+      const isRec = recIds.map(Number).includes(Number(id));
+      await trackLearningEvent({
+        userId,
+        courseId: id,
+        courseName: course.fullname,
+        action: 'start',
+        source: isRec ? 'recommended' : 'catalog',
+        totalModules: countCurriculumModules(course.curriculum),
+      });
+    }
     setIsEnrolled(true);
-    // Smooth scroll to top to see the new dashboard
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    router.push(`/courses/${id}`);
   };
 
   if (loading) return (

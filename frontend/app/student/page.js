@@ -1,12 +1,18 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  Trophy, 
-  Clock, 
+import { useSession } from 'next-auth/react';
+import Link from 'next/link';
+import { apiUrl } from '@/lib/apiBase';
+import {
+  fetchUserProgress,
+  calcProgressPercent,
+  formatDurationMinutes,
+} from '@/lib/learningProgress';
+import {
+  Trophy,
   ChevronRight,
   Brain,
-  CalendarDays,
   ChevronLeft,
   Settings2,
   Users,
@@ -16,198 +22,299 @@ import {
   Bookmark,
   Plus,
   Star,
-  Target,
-  ChevronRightSquare,
-  ArrowUpRight,
   Loader2,
-  Sparkles
+  Sparkles,
+  MapPin,
 } from 'lucide-react';
 
 export default function StudentDashboard() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
+  const [enrolledCourses, setEnrolledCourses] = useState([]);
+  const [progressData, setProgressData] = useState({ courses: {} });
+  const [learningPaths, setLearningPaths] = useState([]);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+
+  const userId = session?.user?.id;
+  const displayName = session?.user?.name || 'Student';
 
   useEffect(() => {
-    setTimeout(() => setLoading(false), 500);
-  }, []);
+    if (status === 'loading') return;
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+    loadDashboard();
+  }, [userId, status]);
 
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <Loader2 className="animate-spin text-primary" size={40} />
-    </div>
-  );
+  const loadDashboard = async () => {
+    setLoading(true);
+    try {
+      const [enrolledRes, progress, pathsRes] = await Promise.all([
+        fetch(apiUrl(`/users/me/courses?userid=${userId}`)).then(r => r.json()).catch(() => []),
+        fetchUserProgress(userId),
+        fetch(apiUrl('/learningpaths')).then(r => r.json()).catch(() => []),
+      ]);
+      setEnrolledCourses(Array.isArray(enrolledRes) ? enrolledRes : []);
+      setProgressData(progress);
+      setLearningPaths(Array.isArray(pathsRes) ? pathsRes : []);
+    } catch (err) {
+      console.error(err);
+    }
+    setLoading(false);
+  };
+
+  const stats = useMemo(() => {
+    const progressCourses = progressData?.courses || {};
+    const startedIds = Object.keys(progressCourses);
+    const allCourseIds = new Set([
+      ...enrolledCourses.map(c => String(c.id)),
+      ...startedIds,
+    ]);
+
+    let completed = 0;
+    let totalSeconds = 0;
+    startedIds.forEach(cid => {
+      const p = progressCourses[cid];
+      const total = p?.totalModules || 0;
+      const pct = calcProgressPercent(p, total);
+      if (pct >= 100 || p?.completedAt) completed += 1;
+      totalSeconds += p?.timeSpentSeconds || 0;
+    });
+
+    const xp = Math.round(totalSeconds / 60) * 10 + completed * 100;
+
+    return {
+      totalCourses: allCourseIds.size,
+      certifications: completed,
+      xp,
+      posts: 0,
+      learningMinutes: Math.round(totalSeconds / 60),
+      level: Math.max(1, Math.floor(xp / 500) + 1),
+      xpInLevel: xp % 500,
+      xpToNext: 500 - (xp % 500),
+    };
+  }, [enrolledCourses, progressData]);
+
+  const myPaths = useMemo(() => {
+    const enrolledIds = new Set(enrolledCourses.map(c => Number(c.id)));
+    const startedIds = new Set(Object.keys(progressData?.courses || {}).map(Number));
+    const allIds = new Set([...enrolledIds, ...startedIds]);
+
+    return learningPaths
+      .filter(lp => (lp.courses || []).some(cid => allIds.has(Number(cid))))
+      .map(lp => ({
+        id: lp.id,
+        name: lp.name,
+        startDate: lp.startDate || '—',
+        endDate: lp.endDate || '—',
+        status: 'Active',
+        credits: lp.credits ?? '0',
+      }));
+  }, [learningPaths, enrolledCourses, progressData]);
+
+  const monthLabel = calendarMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  const daysInMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
+  const firstWeekday = (new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1).getDay() + 6) % 7;
+  const today = new Date();
+  const isCurrentMonth =
+    today.getMonth() === calendarMonth.getMonth() &&
+    today.getFullYear() === calendarMonth.getFullYear();
+
+  if (loading || status === 'loading') {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="animate-spin text-primary" size={40} />
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto px-10 py-8 min-h-screen bg-[var(--background)] flex flex-col gap-8">
-      
-      {/* ── DASHBOARD HEADER ── */}
+    <div className="w-full max-w-[1600px] mx-auto px-6 sm:px-10 py-8 min-h-screen bg-[var(--background)] flex flex-col gap-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-black text-[var(--text-main)]">Dashboard</h1>
-        <button className="flex items-center gap-2 px-4 py-2 bg-surface border border-glass-border rounded-xl text-xs font-bold text-[var(--text-muted)] shadow-sm hover:bg-white/5 transition-all">
+        <button
+          type="button"
+          onClick={() => router.push('/profile')}
+          className="flex items-center gap-2 px-4 py-2 bg-surface border border-glass-border rounded-xl text-xs font-bold text-[var(--text-muted)] shadow-sm hover:bg-white/5 transition-all"
+        >
           <Settings2 size={16} />
           Customize Dashboard
         </button>
       </div>
 
-      {/* ── TOP ROW: ACHIEVEMENTS & CALENDAR ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* Achievements Widget */}
-        <div className="bg-surface rounded-[32px] p-10 border border-glass-border shadow-sm flex flex-col items-center">
+        <div className="bg-surface rounded-[32px] p-8 sm:p-10 border border-glass-border shadow-sm flex flex-col items-center">
           <div className="w-full flex justify-start mb-2">
             <h2 className="text-lg font-black text-[var(--text-main)]">Achievements</h2>
           </div>
-          
+
           <div className="flex flex-col items-center mb-10">
-            <div className="w-32 h-32 rounded-full border-4 border-primary/20 p-1 mb-4">
-              <div className="w-full h-full rounded-full bg-background/50 flex items-center justify-center overflow-hidden">
-                <Users size={64} className="text-[var(--text-muted)] opacity-30" />
-              </div>
+            <div className="w-28 h-28 rounded-full border-4 border-primary/20 p-1 mb-4 overflow-hidden">
+              {session?.user?.image ? (
+                <img src={session.user.image} alt="" className="w-full h-full rounded-full object-cover" />
+              ) : (
+                <div className="w-full h-full rounded-full bg-background/50 flex items-center justify-center">
+                  <Users size={48} className="text-[var(--text-muted)] opacity-30" />
+                </div>
+              )}
             </div>
-            <h3 className="text-xl font-black text-[var(--text-main)] capitalize">deepak kumar</h3>
-            <button className="text-primary text-xs font-bold underline mt-1">View Profile</button>
+            <h3 className="text-xl font-black text-[var(--text-main)] capitalize">{displayName}</h3>
+            <Link href="/profile" className="text-primary text-xs font-bold underline mt-1">
+              View Profile
+            </Link>
           </div>
 
           <div className="grid grid-cols-2 gap-4 w-full">
-            <StatTile label="Certifications" value="0" icon={<Award size={20} />} />
-            <StatTile label="Total Courses" value="1" icon={<GraduationCap size={20} />} />
-            <StatTile label="XP Points" value="0" icon={<TrendingUp size={20} />} />
-            <StatTile label="Post" value="0" icon={<Bookmark size={20} />} />
+            <StatTile label="Certifications" value={stats.certifications} icon={<Award size={20} />} />
+            <StatTile label="Total Courses" value={stats.totalCourses} icon={<GraduationCap size={20} />} />
+            <StatTile label="XP Points" value={stats.xp} icon={<TrendingUp size={20} />} />
+            <StatTile label="Learning Time" value={formatDurationMinutes(stats.learningMinutes * 60)} icon={<Bookmark size={20} />} />
           </div>
         </div>
 
-        {/* Calendar Widget */}
-        <div className="bg-surface rounded-[32px] p-10 border border-glass-border shadow-sm">
+        <div className="bg-surface rounded-[32px] p-8 sm:p-10 border border-glass-border shadow-sm">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-4">
-              <h2 className="text-lg font-black text-[var(--text-main)]">April 2026</h2>
+              <h2 className="text-lg font-black text-[var(--text-main)]">{monthLabel}</h2>
               <div className="flex gap-2">
-                <button className="p-1.5 bg-background rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"><ChevronLeft size={18} /></button>
-                <button className="p-1.5 bg-background rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"><ChevronRight size={18} /></button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCalendarMonth(
+                      new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1)
+                    )
+                  }
+                  className="p-1.5 bg-background rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCalendarMonth(
+                      new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1)
+                    )
+                  }
+                  className="p-1.5 bg-background rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"
+                >
+                  <ChevronRight size={18} />
+                </button>
               </div>
             </div>
-            <button className="p-2 bg-background rounded-lg text-[var(--text-main)] hover:bg-white/5 transition-colors"><Plus size={20} /></button>
           </div>
-          
+
           <div className="grid grid-cols-7 text-center mb-4">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-              <span key={day} className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">{day}</span>
+              <span key={day} className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">
+                {day}
+              </span>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-y-6 text-center">
-            {Array(2).fill(0).map((_, i) => <div key={i}></div>)}
-            {Array.from({ length: 30 }, (_, i) => i + 1).map(date => (
-              <div key={date} className="flex items-center justify-center">
-                <span className={`w-10 h-10 flex items-center justify-center text-sm font-bold rounded-xl transition-all cursor-pointer
-                  ${date === 30 
-                    ? 'border-2 border-primary text-primary shadow-lg shadow-primary/10 bg-primary/5' 
-                    : 'text-[var(--text-main)] hover:bg-white/5'}`}
-                >
-                  {date}
-                </span>
-              </div>
+          <div className="grid grid-cols-7 gap-y-4 text-center">
+            {Array.from({ length: firstWeekday }).map((_, i) => (
+              <div key={`pad-${i}`} />
             ))}
+            {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(date => {
+              const isToday = isCurrentMonth && date === today.getDate();
+              return (
+                <div key={date} className="flex items-center justify-center">
+                  <span
+                    className={`w-9 h-9 flex items-center justify-center text-sm font-bold rounded-xl transition-all ${
+                      isToday
+                        ? 'border-2 border-primary text-primary shadow-lg shadow-primary/10 bg-primary/5'
+                        : 'text-[var(--text-main)] hover:bg-white/5'
+                    }`}
+                  >
+                    {date}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* ── CODE EDITOR CTA ── */}
-      <div 
+      <div
         onClick={() => router.push('/code_editor')}
-        className="bg-gradient-to-r from-primary/10 to-purple-600/10 border border-primary/20 rounded-[40px] p-10 flex items-center justify-between overflow-hidden relative cursor-pointer hover:border-primary/40 transition-all group shadow-xl"
+        className="bg-gradient-to-r from-primary/10 to-purple-600/10 border border-primary/20 rounded-[40px] p-8 sm:p-10 flex items-center justify-between overflow-hidden relative cursor-pointer hover:border-primary/40 transition-all group shadow-xl"
       >
-        <div className="absolute -right-10 -bottom-10 opacity-10 group-hover:scale-110 transition-transform">
-          <Brain size={260} />
-        </div>
         <div className="relative z-10 max-w-xl">
           <span className="flex items-center gap-2 text-primary font-black uppercase tracking-widest text-[10px] mb-4">
             <Sparkles size={14} /> New Feature
           </span>
-          <h2 className="text-3xl font-black text-[var(--text-main)] mb-4 leading-tight italic uppercase">AI Integrated Code Editor</h2>
-          <p className="text-[var(--text-muted)] text-sm mb-8 leading-relaxed font-bold">Solve challenges, hunt bugs, and master programming with our AI-powered coding platform.</p>
-          <button className="bg-primary text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-primary/30 group-hover:scale-105 transition-all">
+          <h2 className="text-2xl sm:text-3xl font-black text-[var(--text-main)] mb-4 leading-tight italic uppercase">
+            AI Integrated Code Editor
+          </h2>
+          <p className="text-[var(--text-muted)] text-sm mb-6 leading-relaxed font-bold">
+            Solve challenges and master programming with our AI-powered platform.
+          </p>
+          <span className="inline-block bg-primary text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest">
             Launch Editor
-          </button>
+          </span>
         </div>
       </div>
 
-      {/* ── BOTTOM ROW: LEARNING PATH & LEVEL UP ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-10">
-        
-        {/* Learning Path Widget */}
         <div className="bg-surface rounded-[32px] border border-glass-border shadow-sm overflow-hidden flex flex-col">
-          <div className="p-8 border-b border-glass-border">
+          <div className="p-6 border-b border-glass-border flex items-center justify-between">
             <h2 className="text-lg font-black text-[var(--text-main)]">Learning Path</h2>
+            <Link href="/courses" className="text-[10px] font-black text-primary uppercase tracking-widest">
+              Browse courses
+            </Link>
           </div>
-          <div className="bg-background/50 px-8 py-4 border-b border-glass-border flex items-center text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">
-            <span className="flex-1">Learning Path Name</span>
-            <span className="w-24">Start Date</span>
-            <span className="w-24">End Date</span>
-            <span className="w-24">Status</span>
-            <span className="w-16 text-right">Credits</span>
-          </div>
-          <div className="flex-grow flex items-center justify-center p-20">
-            <p className="text-sm font-bold text-[var(--text-muted)] italic">You are not enrolled into any Learning path yet.</p>
-          </div>
+          {myPaths.length > 0 ? (
+            <>
+              <div className="bg-background/50 px-6 py-3 border-b border-glass-border flex items-center text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest gap-2">
+                <span className="flex-1">Path Name</span>
+                <span className="w-20 hidden sm:block">Start</span>
+                <span className="w-20 hidden sm:block">End</span>
+                <span className="w-16 text-right">Credits</span>
+              </div>
+              <div className="divide-y divide-glass-border">
+                {myPaths.map(lp => (
+                  <div key={lp.id} className="px-6 py-4 flex items-center gap-2 text-xs font-bold">
+                    <MapPin size={14} className="text-primary shrink-0" />
+                    <span className="flex-1 text-[var(--text-main)]">{lp.name}</span>
+                    <span className="w-20 text-[var(--text-muted)] hidden sm:block">{lp.startDate}</span>
+                    <span className="w-20 text-[var(--text-muted)] hidden sm:block">{lp.endDate}</span>
+                    <span className="w-16 text-right text-primary">{lp.credits}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="flex-grow flex items-center justify-center p-16">
+              <p className="text-sm font-bold text-[var(--text-muted)] italic text-center">
+                You are not enrolled in any learning path yet. Start a course from the library.
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Level Up & Leaders Widget */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-surface rounded-[32px] p-8 border border-glass-border shadow-sm flex flex-col gap-6">
-            <h2 className="text-lg font-black text-[var(--text-main)]">Level Up</h2>
-            
-            <div className="relative pt-4">
-              <div className="flex items-end gap-2 mb-4">
-                <span className="text-3xl font-black text-[var(--text-main)]">1</span>
-                <span className="text-xs font-black text-primary uppercase mb-1">0 XP</span>
-              </div>
-              <div className="absolute top-2 right-0">
-                 <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-white shadow-lg shadow-primary/20">
-                    <Star size={24} />
-                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white text-slate-800">1</div>
-                 </div>
-              </div>
-              <p className="text-[10px] font-black text-[var(--text-muted)] uppercase mb-2">Progress to level 2</p>
-              <div className="w-full h-2 bg-background rounded-full overflow-hidden">
-                <div className="w-[10%] h-full bg-slate-500 rounded-full"></div>
-              </div>
-              <p className="text-[10px] font-black text-green-500 uppercase mt-4 tracking-widest">120 XP needed for next level</p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="bg-green-500/5 rounded-2xl p-4 flex items-center gap-4 border border-green-500/10">
-                <div className="w-10 h-10 bg-surface border border-glass-border rounded-xl flex items-center justify-center text-green-500 shadow-sm">
-                  <Trophy size={18} />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Current Rank</p>
-                  <p className="text-sm font-black text-[var(--text-main)]">#177</p>
-                </div>
-              </div>
-              <div className="bg-primary/5 rounded-2xl p-4 flex items-center gap-4 border border-primary/10">
-                <div className="w-10 h-10 bg-surface border border-glass-border rounded-xl flex items-center justify-center text-primary shadow-sm">
-                  <Star size={18} />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Next Milestone</p>
-                  <p className="text-[11px] font-bold text-[var(--text-main)] line-clamp-1">Need 120 XP to reach next...</p>
-                </div>
-              </div>
-            </div>
+        <div className="bg-surface rounded-[32px] p-8 border border-glass-border shadow-sm flex flex-col gap-6">
+          <h2 className="text-lg font-black text-[var(--text-main)]">Your progress</h2>
+          <div className="flex items-end gap-2">
+            <span className="text-3xl font-black text-[var(--text-main)]">{stats.level}</span>
+            <span className="text-xs font-black text-primary uppercase mb-1">{stats.xp} XP</span>
           </div>
-
-          {/* Top Performers */}
-          <div className="bg-surface rounded-[32px] p-8 border border-glass-border shadow-sm flex flex-col">
-            <h2 className="text-lg font-black text-[var(--text-main)] mb-6">Top Performers</h2>
-            <div className="space-y-4 flex-grow">
-              <LeaderboardItem name="Admin User" xp="45155" rank="1" />
-              <LeaderboardItem name="Student..." xp="8334" rank="2" />
-              <LeaderboardItem name="Adam..." xp="1215" rank="3" />
-            </div>
-            <button className="w-full mt-6 py-3 text-primary font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:translate-x-1 transition-all">
-              View Full Leaderboard <ChevronRight size={16} />
-            </button>
+          <p className="text-[10px] font-black text-[var(--text-muted)] uppercase">Progress to level {stats.level + 1}</p>
+          <div className="w-full h-2 bg-background rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all"
+              style={{ width: `${(stats.xpInLevel / 500) * 100}%` }}
+            />
           </div>
+          <p className="text-[10px] font-black text-green-500 uppercase tracking-widest">
+            {stats.xpToNext} XP needed for next level
+          </p>
+          <Link
+            href="/courses"
+            className="mt-2 w-full py-3 text-center bg-primary/10 text-primary font-black text-xs uppercase tracking-widest rounded-xl border border-primary/20 hover:bg-primary/15 transition-all"
+          >
+            Go to My Learning
+          </Link>
         </div>
       </div>
     </div>
@@ -221,26 +328,9 @@ function StatTile({ label, value, icon }) {
         <p className="text-[10px] font-black text-[var(--text-muted)] mb-1">{label}</p>
         <p className="text-xl font-black text-[var(--text-main)]">{value}</p>
       </div>
-      <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+      <div className="w-11 h-11 bg-primary/10 rounded-2xl flex items-center justify-center text-primary group-hover:scale-110 transition-transform shrink-0">
         {icon}
       </div>
-    </div>
-  );
-}
-
-function LeaderboardItem({ name, xp, rank }) {
-  return (
-    <div className="flex items-center justify-between p-4 rounded-3xl hover:bg-background transition-all cursor-pointer border border-transparent hover:border-glass-border">
-      <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-full bg-background border-2 border-surface overflow-hidden flex items-center justify-center">
-           <Users size={24} className="text-[var(--text-muted)] opacity-30" />
-        </div>
-        <div>
-          <p className="text-sm font-black text-[var(--text-main)]">{name}</p>
-          <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest">Level 1 • {xp} XP</p>
-        </div>
-      </div>
-      <span className="text-xs font-black text-[var(--text-muted)] mr-2">#{rank}</span>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { 
   ChevronLeft, 
   ChevronDown, 
@@ -20,86 +21,149 @@ import {
   BookMarked
 } from 'lucide-react';
 import Image from 'next/image';
+import { apiUrl } from '@/lib/apiBase';
+import { isNumericCourseId, normalizeCurriculumSections, STATIC_DEMO_CURRICULUM } from '@/lib/courseContent';
+import {
+  fetchRecommendedIds,
+  fetchUserProgress,
+  trackLearningEvent,
+  buildModuleKey,
+  countCurriculumModules,
+  calcProgressPercent,
+  formatDurationMinutes,
+  formatActivityTime,
+} from '@/lib/learningProgress';
 
 export default function CourseAcademyPlayer() {
   const router = useRouter();
   const { id } = useParams();
+  const { data: session } = useSession();
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeModule, setActiveModule] = useState(null);
   const [learningPaths, setLearningPaths] = useState([]);
   const [activePath, setActivePath] = useState(null);
+  const [courseProgress, setCourseProgress] = useState(null);
+  const [isRecommendedCourse, setIsRecommendedCourse] = useState(false);
+  const moduleTimerRef = useRef(null);
+  const moduleStartedRef = useRef(null);
 
-  const STATIC_POSH_CURRICULUM = [
-    {
-      name: "Topic 1",
-      modules: [
-        { name: "Posh Policy India", modname: "resource", url: "/Posh_Policy.pdf" },
-        { name: "POSH India forms", modname: "resource", url: "/Posh_Forms.pdf" },
-        { name: "Maxval session", modname: "zoom", url: "https://zoom.us/test" },
-        { name: "CP - Posh (Anti Sexual Harassment)", modname: "url", url: "https://example.com" },
-        { name: "Learning New language", modname: "lesson", url: "/Lesson.pdf" },
-        { name: "Test session", modname: "zoom", url: "https://zoom.us/test" },
-        { name: "quiz test 23", modname: "quiz", url: "https://example.com/quiz" },
-      ]
-    }
-  ];
+  const userId = session?.user?.id;
+
+  const refreshProgress = useCallback(async () => {
+    if (!userId) return;
+    const data = await fetchUserProgress(userId);
+    const prog = data?.courses?.[String(id)];
+    setCourseProgress(prog || null);
+  }, [userId, id]);
 
   useEffect(() => {
     fetchCourseDetails();
     fetchLearningPaths();
+    fetchRecommendedIds().then(ids => setIsRecommendedCourse(ids.map(Number).includes(Number(id))));
   }, [id]);
+
+  useEffect(() => {
+    refreshProgress();
+  }, [refreshProgress]);
+
+  useEffect(() => {
+    if (!course || !userId) return;
+    let cancelled = false;
+    (async () => {
+      const recIds = await fetchRecommendedIds();
+      if (cancelled) return;
+      const isRec = recIds.map(Number).includes(Number(id));
+      setIsRecommendedCourse(isRec);
+      await trackLearningEvent({
+        userId,
+        courseId: id,
+        courseName: course.fullname,
+        action: 'start',
+        source: isRec ? 'recommended' : 'catalog',
+        totalModules: countCurriculumModules(course.curriculum),
+      });
+      await refreshProgress();
+    })();
+    return () => { cancelled = true; };
+  }, [course?.id, userId, id, refreshProgress]);
 
   const fetchLearningPaths = async () => {
     try {
-      const res = await fetch('http://localhost:4000/api/learningpaths');
+      const res = await fetch(apiUrl('/learningpaths'));
       const paths = await res.json();
-      setLearningPaths(paths);
-      
-      // Find if this course is part of any path
-      const path = paths.find(p => p.courses?.includes(id));
+      const list = Array.isArray(paths) ? paths : [];
+      setLearningPaths(list);
+      const courseIdNum = parseInt(id, 10);
+      const path = list.find(p =>
+        (p.courses || []).some(cid => String(cid) === String(id) || Number(cid) === courseIdNum)
+      );
       if (path) setActivePath(path);
-    } catch (err) { console.error('Failed to fetch learning paths', err); }
+    } catch (err) {
+      console.error('Failed to fetch learning paths', err);
+    }
   };
 
   const fetchCourseDetails = async () => {
     try {
-      const res = await fetch(`http://localhost:4000/api/courses/${id}`);
-      const data = await res.json();
-      
-      // 🕵️ Filter out 'Announcements' and 'Forum' modules that are just clutter
-      const filteredCurriculum = (data && data.length > 0 ? data : STATIC_POSH_CURRICULUM).map(topic => ({
-        ...topic,
-        modules: (topic.modules || []).filter(m => 
-          m.name?.toLowerCase() !== 'announcements' && 
-          m.modname !== 'forum'
-        ).map(m => {
-          // 📄 Smart PDF Detection: If a URL activity points to a PDF, treat it as a resource
-          const url = m.externalurl || m.url || '';
-          const lowUrl = url.toLowerCase();
-          if (m.modname === 'url' && (lowUrl.endsWith('.pdf') || lowUrl.includes('pluginfile.php'))) {
-             return { ...m, modname: 'resource', isDetectedPdf: true };
-          }
-          // 🎥 Smart Video Detection: If a URL activity points to a video, treat it as a video
-          if (m.modname === 'url' && (lowUrl.endsWith('.mp4') || lowUrl.endsWith('.mov') || lowUrl.endsWith('.webm'))) {
-             return { ...m, modname: 'video', isDetectedVideo: true };
-          }
-          return m;
-        })
-      }));
+      let fullname = 'Course';
+      let shortname = '';
+      let summary =
+        'Explore lessons, resources, and activities for this course. Select a module from the sidebar to begin.';
 
-      const courseData = {
-        id: id,
-        fullname: filteredCurriculum?.[0]?.name || "POSH Compliance",
-        shortname: "POSH",
-        summary: "This course has an ILT presentation for the POSH course, a Policy Handout, and forms. It covers essential guidelines for preventing sexual harassment in the workplace.",
-        image: "/posh_banner.png",
-        curriculum: filteredCurriculum
-      };
-      
-      setCourse(courseData);
+      if (isNumericCourseId(id)) {
+        try {
+          const metaRes = await fetch(apiUrl('/courses'));
+          const all = await metaRes.json();
+          const meta = (Array.isArray(all) ? all : []).find(c => String(c.id) === String(id));
+          if (meta) {
+            fullname = meta.fullname || meta.shortname || fullname;
+            shortname = meta.shortname || '';
+            summary = meta.summary?.replace(/<[^>]*>/g, '') || summary;
+          }
+        } catch {
+          /* optional metadata */
+        }
+
+        const res = await fetch(apiUrl(`/courses/${id}`));
+        const data = await res.json();
+        if (data?.error) throw new Error(data.error);
+
+        const filteredCurriculum = normalizeCurriculumSections(
+          Array.isArray(data) && data.length > 0 ? data : STATIC_DEMO_CURRICULUM,
+          fullname
+        );
+
+        const coursePayload = {
+          id,
+          fullname,
+          shortname: shortname || fullname,
+          summary,
+          image: '/posh_banner.png',
+          curriculum: filteredCurriculum,
+        };
+        setCourse(coursePayload);
+        return;
+      }
+
+      setCourse({
+        id,
+        fullname: 'Demo course',
+        shortname: 'Demo',
+        summary,
+        image: '/posh_banner.png',
+        curriculum: STATIC_DEMO_CURRICULUM,
+      });
     } catch (err) {
       console.error(err);
+      setCourse({
+        id,
+        fullname: 'Course',
+        shortname: '',
+        summary: 'Showing offline demo content because the course could not be loaded from Moodle.',
+        image: '/posh_banner.png',
+        curriculum: STATIC_DEMO_CURRICULUM,
+      });
     } finally {
       setLoading(false);
     }
@@ -123,6 +187,76 @@ export default function CourseAcademyPlayer() {
   );
 
   const curriculum = course.curriculum;
+  const totalModules = countCurriculumModules(curriculum);
+  const progressPercent = calcProgressPercent(courseProgress, totalModules);
+  const completedCount = courseProgress?.completedModules?.length || 0;
+  const timeSpentLabel = formatDurationMinutes(courseProgress?.timeSpentSeconds);
+  const lastActivityLabel = courseProgress?.completedAt
+    ? `Completed ${formatActivityTime(courseProgress.completedAt)}`
+    : courseProgress?.lastActivityAt
+      ? `Last active ${formatActivityTime(courseProgress.lastActivityAt)}`
+      : 'Not started yet';
+
+  const flushModuleTime = async (mod, seconds) => {
+    if (!userId || !mod?._key || seconds < 3) return;
+    await trackLearningEvent({
+      userId,
+      courseId: id,
+      courseName: course.fullname,
+      action: 'view_module',
+      moduleKey: mod._key,
+      seconds,
+      source: isRecommendedCourse ? 'recommended' : 'catalog',
+      totalModules,
+    });
+    await refreshProgress();
+  };
+
+  const openModule = async (mod, tIdx, mIdx) => {
+    if (moduleTimerRef.current && activeModule) {
+      const elapsed = Math.round((Date.now() - moduleStartedRef.current) / 1000);
+      await flushModuleTime(activeModule, elapsed);
+    }
+    const enriched = { ...mod, _key: buildModuleKey(tIdx, mIdx, mod), _tIdx: tIdx, _mIdx: mIdx };
+    setActiveModule(enriched);
+    moduleStartedRef.current = Date.now();
+    if (userId) {
+      await trackLearningEvent({
+        userId,
+        courseId: id,
+        courseName: course.fullname,
+        action: 'view_module',
+        moduleKey: enriched._key,
+        source: isRecommendedCourse ? 'recommended' : 'catalog',
+        totalModules,
+      });
+      await refreshProgress();
+    }
+  };
+
+  const markModuleComplete = async () => {
+    if (!activeModule || !userId) return;
+    const elapsed = moduleStartedRef.current
+      ? Math.round((Date.now() - moduleStartedRef.current) / 1000)
+      : 0;
+    await trackLearningEvent({
+      userId,
+      courseId: id,
+      courseName: course.fullname,
+      action: 'complete_module',
+      moduleKey: activeModule._key,
+      seconds: Math.max(elapsed, 30),
+      source: isRecommendedCourse ? 'recommended' : 'catalog',
+      totalModules,
+    });
+    moduleStartedRef.current = Date.now();
+    await refreshProgress();
+  };
+
+  const isModuleDone = (tIdx, mIdx, mod) => {
+    const key = buildModuleKey(tIdx, mIdx, mod);
+    return courseProgress?.completedModules?.includes(key);
+  };
 
   return (
     <div className="min-h-screen bg-[var(--background)] pb-20 font-sans">
@@ -140,7 +274,9 @@ export default function CourseAcademyPlayer() {
                         <div className="p-1.5 rounded-lg bg-surface-hover text-[var(--text-muted)] group-hover:text-primary group-hover:bg-primary/10 transition-all">
                            <ChevronLeft size={14} />
                         </div>
-                        <h3 className="text-base font-black text-[var(--text-main)] tracking-tight group-hover:text-primary transition-colors">POSH</h3>
+                        <h3 className="text-base font-black text-[var(--text-main)] tracking-tight group-hover:text-primary transition-colors line-clamp-1">
+                           {course.shortname || course.fullname}
+                        </h3>
                      </button>
                   </div>
                   
@@ -161,7 +297,7 @@ export default function CourseAcademyPlayer() {
                         <div className="p-5 flex items-center justify-between group cursor-pointer hover:bg-surface-hover/30 transition-all">
                            <div className="space-y-0.5">
                               <h4 className="text-xs font-black text-[var(--text-main)]">{topic.name}</h4>
-                              <p className="text-[9px] font-black text-[var(--text-muted)] opacity-50">({topic.modules?.length || 0}/13)</p>
+                              <p className="text-[9px] font-black text-[var(--text-muted)] opacity-50">({topic.modules?.length || 0}/{totalModules || '?'})</p>
                            </div>
                            <ChevronDown size={14} className="text-[var(--text-muted)] group-hover:text-primary transition-all" />
                         </div>
@@ -175,13 +311,13 @@ export default function CourseAcademyPlayer() {
                               if (mod.modname === 'zoom' || mod.name?.toLowerCase().includes('session')) Icon = Video;
                               if (mod.modname === 'lesson') Icon = User;
 
-                              const isCompleted = mod.name === "Learning New language";
-                              const isActive = activeModule?.name === mod.name;
+                              const isCompleted = isModuleDone(tIdx, mIdx, mod);
+                              const isActive = activeModule?._key === buildModuleKey(tIdx, mIdx, mod);
 
                               return (
                                  <div 
                                     key={mIdx} 
-                                    onClick={() => setActiveModule(mod)}
+                                    onClick={() => openModule(mod, tIdx, mIdx)}
                                     className={`flex items-center justify-between p-2.5 rounded-lg transition-all group cursor-pointer ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-surface-hover'}`}
                                  >
                                     <div className="flex items-center gap-3">
@@ -260,6 +396,12 @@ export default function CourseAcademyPlayer() {
                            className="px-6 py-2 rounded-xl text-xs font-black text-[var(--text-muted)] bg-surface-hover hover:text-primary transition-all border border-glass-border flex items-center gap-2"
                         >
                            <ChevronLeft size={14} /> Dashboard
+                        </button>
+                        <button
+                           onClick={markModuleComplete}
+                           className="px-6 py-2.5 rounded-xl text-xs font-black text-white bg-emerald-600 hover:bg-emerald-500 transition-all shadow-lg flex items-center gap-2"
+                        >
+                           <CheckCircle2 size={14} /> Mark complete
                         </button>
                         <button className="px-8 py-2.5 rounded-xl text-xs font-black text-white bg-primary hover:bg-secondary transition-all shadow-lg shadow-primary/20 flex items-center gap-2">
                            Next <ChevronLeft size={14} className="rotate-180" />
@@ -373,14 +515,22 @@ export default function CourseAcademyPlayer() {
                      <h1 className="text-2xl font-black text-[var(--text-main)] tracking-tight">{course.shortname || course.fullname}</h1>
                      <div className="flex items-center gap-6">
                         <div className="flex-grow h-1.5 bg-slate-100 dark:bg-slate-800/30 rounded-full overflow-hidden">
-                           <div className="h-full bg-secondary w-[5%] rounded-full shadow-[0_0_8px_rgba(14,165,233,0.3)]"></div>
+                           <div
+                              className="h-full bg-secondary rounded-full shadow-[0_0_8px_rgba(14,165,233,0.3)] transition-all"
+                              style={{ width: `${progressPercent}%` }}
+                           ></div>
                         </div>
                         <div className="w-10 h-10 rounded-full bg-surface flex items-center justify-center text-[9px] font-black text-[var(--text-main)] border-2 border-slate-100 dark:border-slate-800 shadow-sm">
-                          5%
+                          {progressPercent}%
                         </div>
                         <button 
-                           onClick={() => setActiveModule(curriculum[0].modules[0])}
-                           className="px-10 py-3 bg-[#00A3FF] hover:bg-[#0092E6] text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-md shadow-blue-500/20 transition-all active:scale-95"
+                           onClick={() => {
+                              const firstTopic = curriculum?.[0];
+                              const first = firstTopic?.modules?.[0];
+                              if (first) openModule(first, 0, 0);
+                           }}
+                           disabled={!curriculum?.[0]?.modules?.length}
+                           className="px-10 py-3 bg-[#00A3FF] hover:bg-[#0092E6] text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-md shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                            Continue Learning
                         </button>
@@ -400,10 +550,10 @@ export default function CourseAcademyPlayer() {
                            <h2 className="text-sm font-black text-[var(--text-main)] uppercase tracking-wider">Learning Progress</h2>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                           <ProgressStatCard value="5%" label="Course Progress" subtext="Completed" icon={<User size={18} className="text-purple-500" />} color="purple" />
+                           <ProgressStatCard value={`${progressPercent}%`} label="Course Progress" subtext={lastActivityLabel} icon={<User size={18} className="text-purple-500" />} color="purple" />
                            <div className="academy-card bg-surface p-5 flex items-center justify-between group hover:shadow-lg transition-all duration-500 rounded-2xl">
                               <div className="space-y-2">
-                                 <h3 className="text-2xl font-black text-[var(--text-main)]">12 min</h3>
+                                 <h3 className="text-2xl font-black text-[var(--text-main)]">{timeSpentLabel}</h3>
                                  <p className="text-[10px] font-black text-[var(--text-main)] opacity-60 flex items-center gap-1.5 uppercase tracking-wider">Time Spent <Info size={10} className="opacity-30" /></p>
                               </div>
                               <div className="w-14 h-14 rounded-[20px] flex items-center justify-center bg-blue-500/10 text-blue-500">
@@ -412,7 +562,7 @@ export default function CourseAcademyPlayer() {
                            </div>
                            <div className="academy-card bg-surface p-5 flex items-center justify-between group hover:shadow-lg transition-all duration-500 rounded-2xl">
                               <div className="space-y-2">
-                                 <h3 className="text-2xl font-black text-[var(--text-main)]">1/19</h3>
+                                 <h3 className="text-2xl font-black text-[var(--text-main)]">{completedCount}/{totalModules || '—'}</h3>
                                  <p className="text-[10px] font-black text-[var(--text-main)] opacity-60 flex items-center gap-1.5 uppercase tracking-wider">Activities <Info size={10} className="opacity-30" /></p>
                               </div>
                               <div className="w-14 h-14 rounded-[20px] flex items-center justify-center bg-emerald-500/10 text-emerald-500">

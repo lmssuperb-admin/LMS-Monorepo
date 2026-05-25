@@ -169,6 +169,71 @@ class MoodleService {
     return data.users || [];
   }
 
+  async createUser(userData) {
+    const users = await this.request('core_user_create_users', {
+      users: [{
+        username: userData.username,
+        password: userData.password,
+        firstname: userData.firstname,
+        lastname: userData.lastname,
+        email: userData.email,
+        auth: userData.auth || 'manual',
+        city: userData.city || '',
+        country: userData.country || 'IN',
+        idnumber: userData.idnumber || '',
+        institution: userData.institution || '',
+        department: userData.department || '',
+        phone1: userData.phone1 || '',
+        phone2: userData.phone2 || '',
+        address: userData.address || '',
+        description: userData.description || '',
+        suspended: userData.suspended ? 1 : 0,
+        preferences: userData.forcechange
+          ? [{ type: 'auth_forcepasswordchange', value: '1' }]
+          : undefined,
+      }],
+    });
+    return Array.isArray(users) ? users : [users];
+  }
+
+  async updateUser(userData) {
+    return this.request('core_user_update_users', {
+      users: [{
+        id: parseInt(userData.id, 10),
+        firstname: userData.firstname,
+        lastname: userData.lastname,
+        email: userData.email,
+        city: userData.city,
+        country: userData.country,
+        idnumber: userData.idnumber,
+        institution: userData.institution,
+        department: userData.department,
+        phone1: userData.phone1,
+        phone2: userData.phone2,
+        address: userData.address,
+        description: userData.description,
+        suspended: userData.suspended ? 1 : 0,
+      }],
+    });
+  }
+
+  async getUserCourses(userid) {
+    const courses = await this.request('core_enrol_get_users_courses', {
+      userid: parseInt(userid, 10),
+      returnusercount: 0,
+    });
+    return Array.isArray(courses) ? courses : [];
+  }
+
+  async getUserTimeline(userid) {
+    const courses = await this.getUserCourses(userid);
+    return courses.slice(0, 10).map(c => ({
+      id: c.id,
+      title: c.fullname || c.shortname,
+      type: 'course',
+    }));
+  }
+
   async getCourses() {
     return this.request('core_course_get_courses');
   }
@@ -347,8 +412,9 @@ class MoodleService {
       description: cohort.description || '',
       visible: cohort.visible,
       memberCount: memberCounts[cohort.id] || 0,
-      timecreated: cohort.timecreated || null,
+      timecreated: cohort.timecreated || cohort.timemodified || null,
       timemodified: cohort.timemodified || null,
+      enrollmentDate: cohort.timecreated || cohort.timemodified || null,
     }));
   }
 

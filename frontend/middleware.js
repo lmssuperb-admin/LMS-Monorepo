@@ -8,12 +8,12 @@ export default withAuth(
 
     // 1. Admin Protection
     if (path.startsWith("/admin") && token?.role !== "admin") {
-      return NextResponse.redirect(new URL("/", req.url));
+      return NextResponse.redirect(new URL("/student", req.url));
     }
 
     // 2. Teacher Protection (Admins can also access teacher panels)
     if (path.startsWith("/teacher") && (token?.role !== "teacher" && token?.role !== "admin")) {
-      return NextResponse.redirect(new URL("/", req.url));
+      return NextResponse.redirect(new URL("/student", req.url));
     }
 
     return NextResponse.next();
@@ -26,5 +26,11 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ["/admin/:path*", "/teacher/:path*", "/profile/:path*", "/courses/:id+"],
+  matcher: [
+    "/admin/:path*",
+    "/teacher/:path*",
+    "/student/:path*",
+    "/profile/:path*",
+    "/courses/:id+",
+  ],
 };

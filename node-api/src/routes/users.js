@@ -44,21 +44,39 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { roleid, ...userData } = req.body;
+  const { roleid, cohortIds, ...userData } = req.body;
   try {
     const users = await moodleService.createUser(userData);
     const newUser = users[0];
-    
-    if (roleid && newUser && newUser.id) {
-       try {
-         await moodleService.assignRole(newUser.id, roleid);
-       } catch (roleErr) {
-         console.error('⚠️ User created but role assignment failed:', roleErr.message);
-       }
+
+    if (roleid && newUser?.id) {
+      try {
+        await moodleService.assignRole(newUser.id, roleid);
+      } catch (roleErr) {
+        console.error('⚠️ User created but role assignment failed:', roleErr.message);
+      }
     }
-    
+
+    const ids = Array.isArray(cohortIds) ? cohortIds : [];
+    if (newUser?.id && ids.length) {
+      const cohortStore = require('../services/cohortStore');
+      for (const cohortId of ids) {
+        try {
+          if (cohortStore.isLocalId(cohortId)) {
+            cohortStore.addMembers(cohortId, [newUser.id]);
+          } else {
+            await moodleService.addCohortMembers(parseInt(cohortId, 10), [newUser.id]);
+          }
+        } catch (cohortErr) {
+          console.error(`⚠️ Cohort ${cohortId} assignment failed:`, cohortErr.message);
+        }
+      }
+    }
+
     res.json(newUser);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.put('/:id', async (req, res) => {
