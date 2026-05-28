@@ -104,16 +104,57 @@ function computeStats(users) {
   };
 }
 
-function filterUsers(users, search) {
-  if (!search?.trim()) return users;
-  const q = search.trim().toLowerCase();
-  return users.filter(u => {
-    const first = (u.firstname || '').toLowerCase();
-    const last = (u.lastname || '').toLowerCase();
-    const email = (u.email || '').toLowerCase();
+function filterUsers(users, search, searchFields = [], filterByRole = 'all', filters = {}) {
+  let filtered = users;
+  if (filterByRole && filterByRole !== 'all') {
+    filtered = filtered.filter(u => {
+      const roleValue = (u.role || '').toString().toLowerCase();
+      return roleValue === filterByRole.toLowerCase();
+    });
+  }
+
+  const normalized = (value) => (value || '').toString().toLowerCase();
+  const courseValue = (u) => [
+    Array.isArray(u.courses) ? u.courses.map(c => (typeof c === 'string' ? c : c.fullname || c.shortname || '')).join(' ') : '',
+    (u.course || ''),
+  ].join(' ').toLowerCase();
+
+  filtered = filtered.filter(u => {
+    const first = normalized(u.firstname);
+    const last = normalized(u.lastname);
+    const email = normalized(u.email);
     const full = `${first} ${last}`.trim();
-    return first.includes(q) || last.includes(q) || email.includes(q) || full.includes(q);
+    const username = normalized(u.username);
+    const city = normalized(u.city);
+    const country = normalized(u.country);
+    const role = normalized(u.role);
+    const courseText = courseValue(u);
+
+    if (filters.fullName && !full.includes(normalized(filters.fullName))) return false;
+    if (filters.email && !email.includes(normalized(filters.email))) return false;
+    if (filters.username && !username.includes(normalized(filters.username))) return false;
+    if (filters.city && !city.includes(normalized(filters.city))) return false;
+    if (filters.country && !country.includes(normalized(filters.country))) return false;
+    if (filters.course && !courseText.includes(normalized(filters.course))) return false;
+    if (filters.systemRole && !role.includes(normalized(filters.systemRole))) return false;
+
+    if (!search?.trim()) return true;
+    const q = search.trim().toLowerCase();
+    const fields = Array.isArray(searchFields) && searchFields.length > 0 ? searchFields : ['name', 'email'];
+
+    const checks = [];
+    if (fields.includes('name')) checks.push(full, first, last);
+    if (fields.includes('email')) checks.push(email);
+    if (fields.includes('username')) checks.push(username);
+    if (fields.includes('city')) checks.push(city);
+    if (fields.includes('country')) checks.push(country);
+    if (fields.includes('course')) checks.push(courseText);
+    if (fields.includes('role')) checks.push(role);
+
+    return checks.some(value => value.includes(q));
   });
+
+  return filtered;
 }
 
 function sortUsers(users, sortBy, sortDir) {
@@ -150,7 +191,7 @@ function sortUsers(users, sortBy, sortDir) {
   return sorted;
 }
 
-async function getUsersManagement({ page = 1, limit = 10, search = '', sortBy = 'firstname', sortDir = 'asc' }) {
+async function getUsersManagement({ page = 1, limit = 10, search = '', sortBy = 'firstname', sortDir = 'asc', filterByRole = 'all', searchFields = [], filters = {} }) {
   const rawUsers = await moodleService.getUsers();
   const users = (rawUsers || []).filter(
     u => !u.deleted && u.id !== 1 && u.username !== 'guest'
@@ -159,7 +200,7 @@ async function getUsersManagement({ page = 1, limit = 10, search = '', sortBy = 
   const statsBase = computeStats(users);
   const totalEnrolments = await getTotalEnrolments();
 
-  const filtered = sortUsers(filterUsers(users, search), sortBy, sortDir);
+  const filtered = sortUsers(filterUsers(users, search, searchFields, filterByRole, filters), sortBy, sortDir);
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const safePage = Math.min(Math.max(1, page), totalPages);
@@ -178,6 +219,10 @@ async function getUsersManagement({ page = 1, limit = 10, search = '', sortBy = 
       firstname: u.firstname || '',
       lastname: u.lastname || '',
       email: u.email || '',
+      username: u.username || '',
+      city: u.city || '',
+      country: u.country || '',
+      role: u.role || '',
       lastaccess,
       suspended,
       timecreated: u.timecreated || 0,

@@ -97,8 +97,6 @@ export default function MasterAdminConsole() {
    const activityFileInputRef = useRef(null);
    const posterImageInputRef = useRef(null);
    const [searchQuery, setSearchQuery] = useState('');
-   const [filterByRole, setFilterByRole] = useState('all');
-   const [activeFilters, setActiveFilters] = useState(['name', 'email']);
    const [learningPaths, setLearningPaths] = useState([]);
    const [editingPath, setEditingPath] = useState(null);
    const [newPathForm, setNewPathForm] = useState({ 
@@ -129,7 +127,17 @@ export default function MasterAdminConsole() {
     const [selectedPathCourses, setSelectedPathCourses] = useState([]);
     const [selectedPathUsers, setSelectedPathUsers] = useState([]);
     const [selectedPathCohorts, setSelectedPathCohorts] = useState([]);
-    const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+   const [showUserFilter, setShowUserFilter] = useState(false);
+   const [userFilters, setUserFilters] = useState({
+      fullName: '',
+      email: '',
+      username: '',
+      city: '',
+      country: '',
+      course: '',
+      systemRole: ''
+   });
+   const [tempUserFilters, setTempUserFilters] = useState({ ...userFilters });
    const [currentPage, setCurrentPage] = useState(1);
    const [itemsPerPage, setItemsPerPage] = useState(10);
    const [userManageStats, setUserManageStats] = useState(null);
@@ -226,38 +234,12 @@ export default function MasterAdminConsole() {
    }, [pathStep, pathSubTab, editingPath?.id]);
 
    useEffect(() => {
-      setCurrentPage(1);
-   }, [searchQuery, filterByRole, activeFilters]);
-
-   useEffect(() => {
       if (subTab !== 'Manage users') return;
       const timer = setTimeout(() => fetchManageUsers(), searchQuery ? 350 : 0);
       return () => clearTimeout(timer);
    }, [subTab, currentPage, itemsPerPage, searchQuery, userSort]);
 
    const { data: session } = useSession();
-
-   const filteredUsers = data.users?.filter(u => {
-      // 1. Role Category Filter
-      if (filterByRole !== 'all' && u.role !== filterByRole) return false;
-
-      // 2. Text Search Filter
-      if (!searchQuery) return true;
-      const query = searchQuery.toLowerCase();
-      const searchInName = activeFilters.includes('name') && (u.fullname?.toLowerCase().includes(query) || u.firstname?.toLowerCase().includes(query) || u.lastname?.toLowerCase().includes(query));
-      const searchInEmail = activeFilters.includes('email') && u.email?.toLowerCase().includes(query);
-      const searchInRole = activeFilters.includes('role') && u.role?.toLowerCase().includes(query);
-
-      // If no specific search fields active, default to globally searching name/email
-      if (activeFilters.length === 0) return searchInName || searchInEmail;
-
-      return searchInName || searchInEmail || searchInRole;
-   });
-
-   const totalUsers = filteredUsers?.length || 0;
-   const totalPages = Math.ceil(totalUsers / itemsPerPage);
-   const startIndex = (currentPage - 1) * itemsPerPage;
-   const paginatedUsers = filteredUsers?.slice(startIndex, startIndex + itemsPerPage);
 
       // hide currently signed-in admin from Manage Users list so admin cannot suspend themselves
       const visibleManageUsers = manageUsers.filter(u => u.id !== session?.user?.id && u.role !== 'admin');
@@ -571,6 +553,13 @@ export default function MasterAdminConsole() {
             search: searchQuery,
             sortBy: userSort.field,
             sortDir: userSort.dir,
+            fullName: userFilters.fullName || '',
+            email: userFilters.email || '',
+            username: userFilters.username || '',
+            city: userFilters.city || '',
+            country: userFilters.country || '',
+            course: userFilters.course || '',
+            systemRole: userFilters.systemRole || '',
          });
          const res = await fetch(`http://localhost:4000/api/users/manage?${params}`).then(r => r.json());
          if (res.error) throw new Error(res.error);
@@ -884,6 +873,49 @@ export default function MasterAdminConsole() {
       const q = cohortSearchQuery.toLowerCase();
       return c.name?.toLowerCase().includes(q) || c.idnumber?.toLowerCase().includes(q);
    });
+
+   const applyUserFilters = () => {
+      setUserFilters({ ...tempUserFilters });
+      setCurrentPage(1);
+      setShowUserFilter(false);
+      fetchManageUsers();
+   };
+
+   const clearAllUserFilters = () => {
+      const empty = { fullName: '', email: '', username: '', city: '', country: '', course: '', systemRole: '' };
+      setTempUserFilters(empty);
+      setUserFilters(empty);
+      setCurrentPage(1);
+      setShowUserFilter(false);
+      fetchManageUsers();
+   };
+
+   const filteredManageUsers = manageUsers
+      .filter(u => u.id !== session?.user?.id && u.role !== 'admin')
+      .filter(u => {
+         const q = searchQuery.toLowerCase();
+         const matchSearch = !searchQuery ||
+            u.firstname?.toLowerCase().includes(q) ||
+            u.lastname?.toLowerCase().includes(q) ||
+            u.email?.toLowerCase().includes(q) ||
+            u.username?.toLowerCase().includes(q);
+
+         const courseText = [
+            Array.isArray(u.courses) ? u.courses.join(' ') : '',
+            (u.course || ''),
+         ].join(' ').toLowerCase();
+
+         const matchFilters =
+            (!userFilters.fullName || `${u.firstname} ${u.lastname}`.toLowerCase().includes(userFilters.fullName.toLowerCase())) &&
+            (!userFilters.email || u.email?.toLowerCase().includes(userFilters.email.toLowerCase())) &&
+            (!userFilters.username || u.username?.toLowerCase().includes(userFilters.username.toLowerCase())) &&
+            (!userFilters.city || u.city?.toLowerCase().includes(userFilters.city.toLowerCase())) &&
+            (!userFilters.country || u.country?.toLowerCase().includes(userFilters.country.toLowerCase())) &&
+            (!userFilters.course || courseText.includes(userFilters.course.toLowerCase())) &&
+            (!userFilters.systemRole || u.role?.toLowerCase().includes(userFilters.systemRole.toLowerCase()));
+
+         return matchSearch && matchFilters;
+      });
 
    return (
       <div className="w-full h-[calc(100vh-80px)] flex overflow-hidden bg-background text-main">
@@ -1266,11 +1298,14 @@ export default function MasterAdminConsole() {
                               value={searchQuery}
                               onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                               className="w-full h-11 bg-background/50 border border-glass-border rounded-xl pl-11 pr-4 text-xs font-bold focus:border-primary outline-none"
-                              placeholder="Search"
+                              placeholder="Search by name, email, username, city, country or role"
                            />
                         </div>
-                        <button className="p-3 rounded-xl border border-glass-border bg-surface text-muted hover:text-primary transition-all">
+                        <button onClick={() => { setTempUserFilters(userFilters); setShowUserFilter(true); }} className="relative p-3 rounded-xl border border-glass-border bg-surface text-muted hover:text-primary transition-all">
                            <SlidersHorizontal size={16} />
+                           {Object.values(userFilters).some(Boolean) && (
+                              <span className="absolute -top-1 -right-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary text-white text-[10px] font-black">{Object.values(userFilters).filter(Boolean).length}</span>
+                           )}
                         </button>
                         <button
                            onClick={openAddUserModal}
@@ -1290,6 +1325,30 @@ export default function MasterAdminConsole() {
                      </div>
 
                      <div className="flex flex-wrap items-center justify-between gap-4 px-2">
+                        <div className="flex flex-wrap gap-2">
+                           {Object.entries(userFilters).filter(([, value]) => value).map(([key, value]) => {
+                              const label = {
+                                 fullName: 'Full Name',
+                                 email: 'Email',
+                                 username: 'Username',
+                                 city: 'City/Town',
+                                 country: 'Country',
+                                 course: 'Course',
+                                 systemRole: 'System Role'
+                              }[key] || key;
+                              return (
+                                 <span key={key} className="inline-flex items-center gap-2 rounded-full border border-glass-border bg-background/70 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-muted">
+                                    <span>{label}:</span>
+                                    <strong className="text-main">{value}</strong>
+                                 </span>
+                              );
+                           })}
+                           {Object.values(userFilters).some(Boolean) && (
+                              <button onClick={clearAllUserFilters} className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/20 transition-all">
+                                 <X size={12} /> Clear filters
+                              </button>
+                           )}
+                        </div>
                         <p className="text-sm font-bold text-main">
                            Total Record Found: <span className="text-primary">{userPagination.total ?? 0}</span>
                         </p>
@@ -1302,10 +1361,10 @@ export default function MasterAdminConsole() {
                                  <th className="p-4 w-12">
                                     <input
                                        type="checkbox"
-                                       checked={visibleManageUsers.length > 0 && selectedUserIds.length === visibleManageUsers.length}
+                                       checked={filteredManageUsers.length > 0 && selectedUserIds.length === filteredManageUsers.length}
                                        onChange={() => {
-                                          if (selectedUserIds.length === visibleManageUsers.length) setSelectedUserIds([]);
-                                          else setSelectedUserIds(visibleManageUsers.map(u => u.id));
+                                          if (selectedUserIds.length === filteredManageUsers.length) setSelectedUserIds([]);
+                                          else setSelectedUserIds(filteredManageUsers.map(u => u.id));
                                        }}
                                        className="w-4 h-4 accent-primary"
                                     />
@@ -1333,7 +1392,7 @@ export default function MasterAdminConsole() {
                               </tr>
                            </thead>
                            <tbody className="divide-y divide-glass-border">
-                              {visibleManageUsers.map(u => (
+                              {filteredManageUsers.map(u => (
                                  <tr key={u.id} className="hover:bg-primary/5 transition-colors text-xs font-bold">
                                     <td className="p-4">
                                        <input
@@ -1396,7 +1455,7 @@ export default function MasterAdminConsole() {
                                     </td>
                                  </tr>
                               ))}
-                              {visibleManageUsers.length === 0 && !loading && (
+                              {filteredManageUsers.length === 0 && !loading && (
                                  <tr>
                                     <td colSpan={9} className="p-16 text-center text-muted text-[10px] font-black uppercase tracking-widest">
                                        No users found
@@ -1457,6 +1516,127 @@ export default function MasterAdminConsole() {
                         <p className="text-[10px] font-black uppercase text-muted tracking-widest">
                            Showing {userPagination.total ? (userPagination.page - 1) * userPagination.limit + 1 : 0}–{Math.min(userPagination.page * userPagination.limit, userPagination.total)} of {userPagination.total}
                         </p>
+                     </div>
+                  </div>
+               )}
+
+               {showUserFilter && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4 animate-in fade-in duration-300">
+                     <div className="bg-surface border border-glass-border rounded-[24px] shadow-2xl max-w-lg w-full max-h-[85vh] overflow-hidden animate-in scale-in duration-300">
+                        <div className="p-6 border-b border-glass-border bg-surface/50 flex items-center justify-between sticky top-0 z-10">
+                           <h2 className="text-lg font-black text-main uppercase tracking-tight">Filter</h2>
+                           <button
+                              onClick={() => clearAllUserFilters()}
+                              className="flex items-center gap-2 text-primary text-[11px] font-black hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-all"
+                           >
+                              <X size={14} /> Clear All
+                           </button>
+                        </div>
+
+                        <div className="overflow-y-auto p-6 space-y-4 max-h-[calc(85vh-180px)]">
+                           <div className="rounded-[28px] border border-glass-border bg-background/70 p-4">
+                              <div className="flex items-center justify-between mb-4">
+                                 <div>
+                                    <h3 className="text-sm font-black uppercase tracking-widest text-muted">Personal</h3>
+                                    <p className="text-[10px] text-muted">Search by name, email and login information.</p>
+                                 </div>
+                              </div>
+                              <div className="grid grid-cols-1 gap-4">
+                                 {[
+                                    { label: 'Full Name', key: 'fullName', icon: <Users size={18} /> },
+                                    { label: 'Email Address', key: 'email', icon: <Mail size={18} /> },
+                                    { label: 'Username', key: 'username', icon: <Users size={18} /> }
+                                 ].map(filter => (
+                                    <div key={filter.key} className="space-y-2">
+                                       <div className="flex items-center gap-3 text-sm font-black text-main">
+                                          <span className="text-primary">{filter.icon}</span>
+                                          <span>{filter.label}</span>
+                                       </div>
+                                       <input
+                                          type="text"
+                                          value={tempUserFilters[filter.key]}
+                                          onChange={(e) => setTempUserFilters(prev => ({ ...prev, [filter.key]: e.target.value }))}
+                                          placeholder={`Search ${filter.label.toLowerCase()}...`}
+                                          className="w-full px-4 py-3 bg-background/50 border border-glass-border rounded-2xl text-xs focus:border-primary outline-none transition-all"
+                                       />
+                                    </div>
+                                 ))}
+                              </div>
+                           </div>
+
+                           <div className="rounded-[28px] border border-glass-border bg-background/70 p-4">
+                              <div className="flex items-center justify-between mb-4">
+                                 <div>
+                                    <h3 className="text-sm font-black uppercase tracking-widest text-muted">Location</h3>
+                                    <p className="text-[10px] text-muted">Filter users by city or country.</p>
+                                 </div>
+                              </div>
+                              <div className="grid grid-cols-1 gap-4">
+                                 {[
+                                    { label: 'City/Town', key: 'city', icon: <MapPin size={18} /> },
+                                    { label: 'Country', key: 'country', icon: <Globe size={18} /> }
+                                 ].map(filter => (
+                                    <div key={filter.key} className="space-y-2">
+                                       <div className="flex items-center gap-3 text-sm font-black text-main">
+                                          <span className="text-primary">{filter.icon}</span>
+                                          <span>{filter.label}</span>
+                                       </div>
+                                       <input
+                                          type="text"
+                                          value={tempUserFilters[filter.key]}
+                                          onChange={(e) => setTempUserFilters(prev => ({ ...prev, [filter.key]: e.target.value }))}
+                                          placeholder={`Search ${filter.label.toLowerCase()}...`}
+                                          className="w-full px-4 py-3 bg-background/50 border border-glass-border rounded-2xl text-xs focus:border-primary outline-none transition-all"
+                                       />
+                                    </div>
+                                 ))}
+                              </div>
+                           </div>
+
+                           <div className="rounded-[28px] border border-glass-border bg-background/70 p-4">
+                              <div className="flex items-center justify-between mb-4">
+                                 <div>
+                                    <h3 className="text-sm font-black uppercase tracking-widest text-muted">Enrollment</h3>
+                                    <p className="text-[10px] text-muted">Filter users by course or role.</p>
+                                 </div>
+                              </div>
+                              <div className="grid grid-cols-1 gap-4">
+                                 {[
+                                    { label: 'Course', key: 'course', icon: <BookOpen size={18} /> },
+                                    { label: 'System Role', key: 'systemRole', icon: <ShieldCheck size={18} /> }
+                                 ].map(filter => (
+                                    <div key={filter.key} className="space-y-2">
+                                       <div className="flex items-center gap-3 text-sm font-black text-main">
+                                          <span className="text-primary">{filter.icon}</span>
+                                          <span>{filter.label}</span>
+                                       </div>
+                                       <input
+                                          type="text"
+                                          value={tempUserFilters[filter.key]}
+                                          onChange={(e) => setTempUserFilters(prev => ({ ...prev, [filter.key]: e.target.value }))}
+                                          placeholder={`Search ${filter.label.toLowerCase()}...`}
+                                          className="w-full px-4 py-3 bg-background/50 border border-glass-border rounded-2xl text-xs focus:border-primary outline-none transition-all"
+                                       />
+                                    </div>
+                                 ))}
+                              </div>
+                           </div>
+                        </div>
+
+                        <div className="border-t border-glass-border p-4 bg-surface/50 flex gap-3 sticky bottom-0 z-10">
+                           <button
+                              onClick={() => setShowUserFilter(false)}
+                              className="flex-1 px-6 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition-all"
+                           >
+                              Cancel
+                           </button>
+                           <button
+                              onClick={applyUserFilters}
+                              className="flex-1 px-6 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest bg-primary text-white hover:shadow-lg hover:shadow-primary/20 transition-all"
+                           >
+                              Apply Filter
+                           </button>
+                        </div>
                      </div>
                   </div>
                )}

@@ -28,8 +28,24 @@ router.get('/manage', async (req, res) => {
     const search = req.query.search || '';
     const sortBy = req.query.sortBy || 'firstname';
     const sortDir = req.query.sortDir || 'asc';
+    const filterByRole = req.query.filterByRole || 'all';
+    const rawSearchFields = req.query.searchFields || '';
+    const searchFields = ([])
+      .concat(rawSearchFields)
+      .flatMap((field) => (typeof field === 'string' ? field.split(',') : []))
+      .map((field) => field.trim())
+      .filter(Boolean);
+    const filters = {
+      fullName: req.query.fullName || '',
+      email: req.query.email || '',
+      username: req.query.username || '',
+      city: req.query.city || '',
+      country: req.query.country || '',
+      course: req.query.course || '',
+      systemRole: req.query.systemRole || '',
+    };
 
-    const data = await getUsersManagement({ page, limit, search, sortBy, sortDir });
+    const data = await getUsersManagement({ page, limit, search, sortBy, sortDir, filterByRole, searchFields, filters });
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -5,10 +5,23 @@ class MoodleService {
   constructor() {
     this.baseUrl = (process.env.MOODLE_URL || '').trim().replace(/^"|"$/g, '');
     this.token = (process.env.MOODLE_WS_TOKEN || '').trim().replace(/^"|"$/g, '');
-    this.restEndpoint = `${this.baseUrl}/webservice/rest/server.php`;
+    try {
+      this.restEndpoint = new URL('/webservice/rest/server.php', this.baseUrl).toString();
+    } catch {
+      this.restEndpoint = '';
+    }
   }
 
   async request(wsfunction, params = {}) {
+    if (!this.baseUrl) {
+      throw new Error('Missing MOODLE_URL environment variable');
+    }
+    if (!this.token) {
+      throw new Error('Missing MOODLE_WS_TOKEN environment variable');
+    }
+    if (!this.restEndpoint) {
+      throw new Error(`Invalid MOODLE_URL value: ${this.baseUrl}`);
+    }
     const fullParams = {
       wstoken: this.token,
       wsfunction,
