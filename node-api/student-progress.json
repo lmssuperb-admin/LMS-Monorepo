@@ -29,7 +29,7 @@
         "courseId": 53,
         "courseName": "video course",
         "startedAt": "2026-05-28T07:16:42.434Z",
-        "lastActivityAt": "2026-05-28T07:21:23.566Z",
+        "lastActivityAt": "2026-05-28T07:30:52.920Z",
         "completedAt": null,
         "source": "recommended",
         "timeSpentSeconds": 0,
@@ -48,7 +48,7 @@
         "courseId": 54,
         "courseName": "video and pdf",
         "startedAt": "2026-05-25T07:34:02.635Z",
-        "lastActivityAt": "2026-05-28T07:26:06.783Z",
+        "lastActivityAt": "2026-05-28T07:31:03.543Z",
         "completedAt": null,
         "source": "recommended",
         "timeSpentSeconds": 30,
@@ -60,7 +60,7 @@
             "startedAt": "2026-05-25T07:34:07.275Z",
             "completedAt": "2026-05-25T07:34:18.865Z",
             "seconds": 30,
-            "lastViewedAt": "2026-05-28T07:25:01.442Z"
+            "lastViewedAt": "2026-05-28T07:31:03.543Z"
           },
           "0_1_72": {
             "startedAt": "2026-05-28T07:22:28.822Z",
