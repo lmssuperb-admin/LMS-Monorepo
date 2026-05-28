@@ -471,6 +471,21 @@ class MoodleService {
     });
     return this.request('core_cohort_add_cohort_members', params);
   }
+
+  async manualEnrolUsers(enrolments = []) {
+    if (!Array.isArray(enrolments) || enrolments.length === 0) return [];
+    const params = {};
+    enrolments.forEach((e, i) => {
+      params[`enrolments[${i}][roleid]`] = parseInt(e.roleid, 10) || 5;
+      params[`enrolments[${i}][userid]`] = parseInt(e.userid, 10);
+      params[`enrolments[${i}][courseid]`] = parseInt(e.courseid, 10);
+      if (e.timestart) params[`enrolments[${i}][timestart]`] = parseInt(e.timestart, 10);
+      if (e.timeend) params[`enrolments[${i}][timeend]`] = parseInt(e.timeend, 10);
+    });
+
+    // Moodle expects the function name 'enrol_manual_enrol_users'
+    return this.request('enrol_manual_enrol_users', params);
+  }
 }
 
 module.exports = new MoodleService();
