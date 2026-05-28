@@ -611,33 +611,49 @@ export default function MasterAdminConsole() {
     setLoading(false);
   };
 
-  const handleEnrollUsers = async () => {
-    const users = selectedUserIds.length ? selectedUserIds : enrolledUserIds;
-    const courses = selectedCourseIds.length ? selectedCourseIds : [];
-    if (!users.length)
-      return alert("Please select at least one user to enroll.");
-    if (!courses.length) return alert("Please select at least one course.");
-    setLoading(true);
-    try {
-      const res = await fetch("http://localhost:4000/api/enrolments/enroll", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userIds: users,
-          courseIds: courses,
-          roleid: modalRole,
-        }),
-      }).then((r) => r.json());
-      if (res.error) throw new Error(res.error);
-      alert("Users enrolled successfully");
-      setShowEnrollModal(false);
-      // refresh users/courses state
-      fetchTabData();
-    } catch (err) {
-      alert("Enrollment failed: " + (err.message || err));
+const handleEnrollUsers = async () => {
+  const users = selectedUserIds.length ? selectedUserIds : enrolledUserIds;
+  const courses = selectedCourseIds.length ? selectedCourseIds : [];
+  if (!users.length) return alert('Please select at least one user to enroll.');
+  if (!courses.length) return alert('Please select at least one course.');
+  setLoading(true);
+  try {
+    // Build an explicit enrolments array matching Moodle's expected structure
+    const enrolments = [];
+    for (const uid of users) {
+      for (const cid of courses) {
+        enrolments.push({
+          userid: Number(uid),
+          courseid: Number(cid),
+          roleid: Number(modalRole) || 5,
+          timestart: 0,
+          timeend: 0,
+        });
+      }
     }
+
+    const res = await fetch('http://localhost:4000/api/enrolments/enroll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enrolments }),
+    }).then(r => r.json());
+
+    if (res.error) throw new Error(res.error);
+
+    alert('Users enrolled successfully');
+    setShowEnrollModal(false);
+    await fetchTabData();
+  } catch (err) {
+    const msg = err?.message || err;
+    if (String(msg).toLowerCase().includes('access control') || String(msg).toLowerCase().includes('permission')) {
+      alert('Enrollment failed: Access denied by Moodle. Ensure your MOODLE_WS_TOKEN has the required capabilities (enrol/manual:enrol) and the token user has appropriate permissions in the course context.\n\nDetails: ' + msg);
+    } else {
+      alert('Enrollment failed: ' + msg);
+    }
+  } finally {
     setLoading(false);
-  };
+  }
+};
   const handleUnassignRole = async (userid, roleid) => {
     if (!confirm("Are you sure you want to revoke this role?")) return;
     setLoading(true);
@@ -1441,10 +1457,10 @@ export default function MasterAdminConsole() {
       {/* MASTER SIDEBAR */}
       <div className="w-64 flex-shrink-0 bg-surface border-r border-glass-border flex flex-col shadow-sm">
         <div className="p-5 border-b border-glass-border">
-          <h1 className="text-lg font-black italic uppercase tracking-tighter">
-            Site
-            <br />
-            <span className="text-primary not-italic">Admin</span>
+          <h1 className="text-lg font-black not-italic uppercase tracking-tighter">
+            Admin
+            {/* <br /> */}
+            <span className="text-primary not-italic"> Panel</span>
           </h1>
         </div>
         <nav className="flex-grow p-3 space-y-1">
@@ -1481,14 +1497,14 @@ export default function MasterAdminConsole() {
       </div>
 
       <div className="flex-grow flex flex-col min-w-0">
-        <div className="h-16 bg-surface/80 border-b border-glass-border px-5 sm:px-6 flex items-center justify-between backdrop-blur-md sticky top-0 z-10">
+        {/* <div className="h-16 bg-surface/80 border-b border-glass-border px-5 sm:px-6 flex items-center justify-between backdrop-blur-md sticky top-0 z-10">
           <h2 className="text-lg font-black italic tracking-tight uppercase text-main/90">
             {subTab}
           </h2>
           {loading && (
             <Loader2 className="animate-spin text-primary" size={18} />
           )}
-        </div>
+        </div> */}
 
         <div className="flex-grow overflow-y-auto p-5 sm:p-6 custom-scrollbar">
           {mainTab === "dashboard" && subTab === "Overview" && (
@@ -6833,7 +6849,7 @@ export default function MasterAdminConsole() {
 
       {/* ── ENROLL USERS MODAL ── */}
       {showEnrollModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+        <div className="fixed inset-0 z-[600] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setShowEnrollModal(false)}
