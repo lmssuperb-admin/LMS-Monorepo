@@ -77,7 +77,8 @@ function LoginForm() {
       });
 
       if (result?.error) {
-        setError(getAuthErrorMessage(result.error));
+        const friendly = getAuthErrorMessage(result.error);
+        setError(friendly || result.error);
         setLoading(false);
         return;
       }

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
@@ -26,7 +26,9 @@ import {
   MousePointer2,
   FileText,
   ClipboardCheck,
-  Video
+  Video,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import Image from 'next/image';
 import { apiUrl } from '@/lib/apiBase';
@@ -41,6 +43,8 @@ export default function CourseEnrollmentPage() {
   const [isEnrolled, setIsEnrolled] = useState(false);
   const [expandedEnroll, setExpandedEnroll] = useState(false);
   const [activeModule, setActiveModule] = useState(null);
+  const [isFullView, setIsFullView] = useState(false);
+  const playerRef = useRef(null);
 
   useEffect(() => {
     fetchCourseDetails();
@@ -102,6 +106,64 @@ export default function CourseEnrollmentPage() {
     }
     setIsEnrolled(true);
     router.push(`/courses/${id}`);
+  };
+
+  const openModule = (mod, tIdx, mIdx) => {
+    setActiveModule({ ...mod, _tIdx: tIdx, _mIdx: mIdx });
+  };
+
+  const toggleFullView = async () => {
+    if (!playerRef.current) return;
+    try {
+      if (!document.fullscreenElement) {
+        await playerRef.current.requestFullscreen();
+        setIsFullView(true);
+      } else {
+        await document.exitFullscreen();
+        setIsFullView(false);
+      }
+    } catch (err) {
+      setIsFullView(prev => !prev);
+    }
+  };
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullView(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const findNextModule = (curriculumList, currentModule) => {
+    if (!Array.isArray(curriculumList) || currentModule == null || currentModule._tIdx == null || currentModule._mIdx == null) {
+      return null;
+    }
+    const nextTopicIndex = currentModule._tIdx;
+    let nextModuleIndex = currentModule._mIdx + 1;
+    if (curriculumList[nextTopicIndex]?.modules?.[nextModuleIndex]) {
+      return {
+        mod: curriculumList[nextTopicIndex].modules[nextModuleIndex],
+        tIdx: nextTopicIndex,
+        mIdx: nextModuleIndex,
+      };
+    }
+    for (let t = nextTopicIndex + 1; t < curriculumList.length; t += 1) {
+      if (curriculumList[t]?.modules?.length) {
+        return {
+          mod: curriculumList[t].modules[0],
+          tIdx: t,
+          mIdx: 0,
+        };
+      }
+    }
+    return null;
+  };
+
+  const goToNextModule = () => {
+    const next = findNextModule(course?.curriculum || [], activeModule);
+    if (!next) return;
+    openModule(next.mod, next.tIdx, next.mIdx);
   };
 
   if (loading) return (
@@ -196,7 +258,7 @@ export default function CourseEnrollmentPage() {
                                 return (
                                    <div 
                                       key={mIdx} 
-                                      onClick={() => setActiveModule(mod)}
+                                      onClick={() => openModule(mod, tIdx, mIdx)}
                                       className={`flex items-center justify-between p-2.5 rounded-lg transition-all group cursor-pointer ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-surface-hover'}`}
                                    >
                                       <div className="flex items-center gap-3">
@@ -224,26 +286,55 @@ export default function CourseEnrollmentPage() {
                  /* ── MODULE PLAYER VIEW ── */
                  <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
                     {/* Player Header */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-4 rounded-[20px] border border-glass-border shadow-sm">
-                       <div>
-                          <h2 className="text-lg font-black text-[var(--text-main)] tracking-tight">{activeModule.name}</h2>
-                          <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Module {activeModule.modname}</p>
-                       </div>
-                       <div className="flex items-center gap-3">
-                          <button 
-                             onClick={() => setActiveModule(null)}
-                             className="px-6 py-2 rounded-xl text-xs font-black text-[var(--text-muted)] bg-surface-hover hover:text-primary transition-all border border-glass-border flex items-center gap-2"
-                          >
-                             <ChevronLeft size={14} /> Previous
-                          </button>
-                          <button className="px-8 py-2.5 rounded-xl text-xs font-black text-white bg-primary hover:bg-secondary transition-all shadow-lg shadow-primary/20 flex items-center gap-2">
-                             Next <ChevronLeft size={14} className="rotate-180" />
-                          </button>
+<div className={`flex flex-col gap-4 ${isFullView ? 'w-full' : ''}`}>
+                          <div className="sticky top-0 z-20 bg-[var(--background)]/95 backdrop-blur-xl border-b border-glass-border py-3 px-4 rounded-[24px] shadow-sm">
+                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                <div>
+                                   <p className="text-[10px] font-black uppercase tracking-[0.35em] text-[var(--text-muted)]">Course Player</p>
+                                   <h2 className="text-xl font-black text-[var(--text-main)] tracking-tight">{course.fullname}</h2>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                   <button 
+                                      onClick={() => setActiveModule(null)}
+                                      className="px-4 py-2 rounded-xl text-xs font-black text-[var(--text-muted)] bg-surface-hover hover:text-primary transition-all border border-glass-border flex items-center gap-2"
+                                   >
+                                      <ChevronLeft size={14} /> Dashboard
+                                   </button>
+                                   <button
+                                      onClick={toggleFullView}
+                                      className="px-4 py-2 rounded-xl text-xs font-black text-[var(--text-muted)] bg-surface-hover hover:text-primary transition-all border border-glass-border flex items-center gap-2"
+                                   >
+                                      {isFullView ? <Minimize2 size={14} /> : <Maximize2 size={14} />} {isFullView ? 'Exit Full View' : 'Full View'}
+                                   </button>
+                                </div>
+                             </div>
+                          </div>
+
+                          <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-4 rounded-[20px] border border-glass-border shadow-sm ${isFullView ? 'shadow-xl' : ''}`}>
+                             <div>
+                                <h2 className="text-lg font-black text-[var(--text-main)] tracking-tight">{activeModule.name}</h2>
+                                <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">Module {activeModule.modname}</p>
+                             </div>
+                             <div className="flex items-center gap-3">
+                                <button 
+                                   onClick={() => setActiveModule(null)}
+                                   className="px-6 py-2 rounded-xl text-xs font-black text-[var(--text-muted)] bg-surface-hover hover:text-primary transition-all border border-glass-border flex items-center gap-2"
+                                >
+                                   <ChevronLeft size={14} /> Previous
+                                </button>
+                                <button
+                                   onClick={goToNextModule}
+                                   disabled={!Boolean(findNextModule(curriculum, activeModule))}
+                                   className="px-8 py-2.5 rounded-xl text-xs font-black text-white bg-primary hover:bg-secondary transition-all shadow-lg shadow-primary/20 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                   Next <ChevronLeft size={14} className="rotate-180" />
+                                </button>
+                             </div>
                        </div>
                     </div>
 
                     {/* Content Display (PDF Viewer) */}
-                    <div className="academy-card bg-surface rounded-[24px] border-glass-border overflow-hidden shadow-xl min-h-[800px] flex flex-col">
+                    <div ref={playerRef} className={`academy-card bg-surface rounded-[24px] border-glass-border overflow-hidden shadow-xl flex flex-col ${isFullView ? 'h-[calc(100vh-220px)]' : 'min-h-[800px]'}`}>
                        {activeModule.modname === 'resource' || activeModule.modname === 'lesson' ? (
                           <div className="flex-grow relative bg-slate-100 dark:bg-slate-900/50">
                              {/* Mock PDF View Container */}
@@ -279,7 +370,18 @@ export default function CourseEnrollmentPage() {
                        ) : (
                           <div className="flex-grow flex flex-col items-center justify-center p-20 text-center space-y-6">
                              <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center text-primary animate-pulse">
-                                <Icon size={40} />
+                                  {(() => {
+                                    const ModulePreviewIcon = activeModule?.modname === 'url'
+                                     ? MousePointer2
+                                     : activeModule?.modname === 'quiz'
+                                      ? ClipboardCheck
+                                      : activeModule?.modname === 'video' || activeModule?.modname === 'zoom'
+                                        ? Video
+                                        : activeModule?.modname === 'lesson'
+                                         ? User
+                                         : BookOpen;
+                                    return <ModulePreviewIcon size={40} />;
+                                  })()}
                              </div>
                              <div className="space-y-2">
                                 <h3 className="text-xl font-black text-[var(--text-main)]">Ready to start?</h3>
@@ -325,7 +427,7 @@ export default function CourseEnrollmentPage() {
                             0%
                           </div>
                           <button 
-                             onClick={() => setActiveModule(curriculum[0].modules[0])}
+                             onClick={() => openModule(curriculum[0].modules[0], 0, 0)}
                              className="px-10 py-3 bg-[#00A3FF] hover:bg-[#0092E6] text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-md shadow-blue-500/20 transition-all active:scale-95"
                           >
                              Start

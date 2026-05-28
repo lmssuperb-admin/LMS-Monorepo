@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, Fragment } from 'react';
+import { useSession } from 'next-auth/react';
 import {
    Users, BookOpen, ShieldCheck, Search, Plus, Activity, Loader2,
    MoreVertical, Edit2, X, ChevronLeft, ChevronRight, Filter, Globe, Database,
@@ -36,6 +37,21 @@ function formatRelativeTime(seconds) {
    if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`;
    if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
    return new Date(seconds * 1000).toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatLastAccessDisplay(val) {
+   if (!val && val !== 0) return 'Never';
+   let date = null;
+   if (typeof val === 'number') {
+      // if value looks like milliseconds (large), use directly, else treat as seconds
+      if (val > 1e12) date = new Date(val);
+      else date = new Date(val * 1000);
+   } else if (typeof val === 'string') {
+      const parsed = Date.parse(val);
+      if (!isNaN(parsed)) date = new Date(parsed);
+   }
+   if (!date || isNaN(date.getTime())) return 'Never';
+   return date.toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 const NOTIFICATION_TAGS = [
@@ -121,7 +137,7 @@ export default function MasterAdminConsole() {
    const [userPagination, setUserPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
    const [userSort, setUserSort] = useState({ field: 'firstname', dir: 'asc' });
    const [selectedUserIds, setSelectedUserIds] = useState([]);
-   const [showMultitenant, setShowMultitenant] = useState(false);
+   // removed multitenant toggle (not needed)
    const [roleForm, setRoleForm] = useState({ userid: '', roleid: '', contextlevel: 'system', instanceid: 0 });
 
    const [courseForm, setCourseForm] = useState({ fullname: '', categoryid: '', summary: '', imageurl: '' });
@@ -219,6 +235,8 @@ export default function MasterAdminConsole() {
       return () => clearTimeout(timer);
    }, [subTab, currentPage, itemsPerPage, searchQuery, userSort]);
 
+   const { data: session } = useSession();
+
    const filteredUsers = data.users?.filter(u => {
       // 1. Role Category Filter
       if (filterByRole !== 'all' && u.role !== filterByRole) return false;
@@ -240,6 +258,9 @@ export default function MasterAdminConsole() {
    const totalPages = Math.ceil(totalUsers / itemsPerPage);
    const startIndex = (currentPage - 1) * itemsPerPage;
    const paginatedUsers = filteredUsers?.slice(startIndex, startIndex + itemsPerPage);
+
+      // hide currently signed-in admin from Manage Users list so admin cannot suspend themselves
+      const visibleManageUsers = manageUsers.filter(u => u.id !== session?.user?.id && u.role !== 'admin');
 
    const fetchTabData = async () => {
       // ðŸ§  Abort previous fetch if still running
@@ -744,8 +765,11 @@ export default function MasterAdminConsole() {
          const method = isEdit ? 'PUT' : 'POST';
          const { cohortIds, ...userFields } = form;
          const payload = isEdit
-            ? userFields
+            ? { ...userFields }
             : { ...userFields, cohortIds: cohortIds || [] };
+
+         // Ensure suspended is sent as integer flag expected by backend
+         if (typeof payload.suspended !== 'undefined') payload.suspended = payload.suspended ? 1 : 0;
 
          const res = await fetch(url, {
             method,
@@ -756,6 +780,8 @@ export default function MasterAdminConsole() {
          if (res.error) throw new Error(res.error);
 
          setShowModal(false);
+         // Refresh users list specifically to reflect suspended changes immediately
+         try { await fetchManageUsers(); } catch (e) { /* ignore */ }
          fetchTabData();
          alert(`User ${isEdit ? 'Updated' : 'Created'} Successfully!`);
       } catch (err) {
@@ -1267,10 +1293,6 @@ export default function MasterAdminConsole() {
                         <p className="text-sm font-bold text-main">
                            Total Record Found: <span className="text-primary">{userPagination.total ?? 0}</span>
                         </p>
-                        <label className="flex items-center gap-2 text-[10px] font-bold text-muted cursor-pointer">
-                           <input type="checkbox" checked={showMultitenant} onChange={e => setShowMultitenant(e.target.checked)} className="w-4 h-4 accent-primary" />
-                           Show Multitenant Records
-                        </label>
                      </div>
 
                      <div className="academy-card overflow-hidden rounded-[20px] border border-glass-border">
@@ -1280,10 +1302,10 @@ export default function MasterAdminConsole() {
                                  <th className="p-4 w-12">
                                     <input
                                        type="checkbox"
-                                       checked={manageUsers.length > 0 && selectedUserIds.length === manageUsers.length}
+                                       checked={visibleManageUsers.length > 0 && selectedUserIds.length === visibleManageUsers.length}
                                        onChange={() => {
-                                          if (selectedUserIds.length === manageUsers.length) setSelectedUserIds([]);
-                                          else setSelectedUserIds(manageUsers.map(u => u.id));
+                                          if (selectedUserIds.length === visibleManageUsers.length) setSelectedUserIds([]);
+                                          else setSelectedUserIds(visibleManageUsers.map(u => u.id));
                                        }}
                                        className="w-4 h-4 accent-primary"
                                     />
@@ -1311,7 +1333,7 @@ export default function MasterAdminConsole() {
                               </tr>
                            </thead>
                            <tbody className="divide-y divide-glass-border">
-                              {manageUsers.map(u => (
+                              {visibleManageUsers.map(u => (
                                  <tr key={u.id} className="hover:bg-primary/5 transition-colors text-xs font-bold">
                                     <td className="p-4">
                                        <input
@@ -1333,17 +1355,23 @@ export default function MasterAdminConsole() {
                                     <td className="p-4">
                                        <span className="text-emerald-600 font-black">{u.coursesCompleted ?? 0}</span>
                                     </td>
-                                    <td className="p-4 text-muted font-medium">{formatLastAccessDetailed(u.lastaccess)}</td>
+                                    <td className="p-4 text-muted font-medium">{formatLastAccessDisplay(u.lastaccess)}</td>
                                     <td className="p-4">
-                                       {u.status === 'active' ? (
-                                          <span className="inline-flex w-8 h-8 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
-                                             <Check size={16} />
-                                          </span>
-                                       ) : (
-                                          <span className="inline-flex w-8 h-8 items-center justify-center rounded-full bg-red-500/15 text-red-500 border border-red-500/30">
-                                             <Minus size={16} />
-                                          </span>
-                                       )}
+                                       {(() => {
+                                          const isSuspended = !!(u.suspended === true || u.suspended === 1 || u.suspended === '1');
+                                          if (!isSuspended) {
+                                             return (
+                                                <span className="inline-flex w-8 h-8 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 border border-emerald-500/30">
+                                                   <Check size={16} />
+                                                </span>
+                                             );
+                                          }
+                                          return (
+                                             <span className="inline-flex w-8 h-8 items-center justify-center rounded-full bg-red-500/15 text-red-500 border border-red-500/30">
+                                                <Minus size={16} />
+                                             </span>
+                                          );
+                                       })()}
                                     </td>
                                     <td className="p-4 text-right relative">
                                        <button onClick={() => setActiveMenu(activeMenu === u.id ? null : u.id)} className="p-2 hover:bg-surface rounded-lg transition-all">
@@ -1351,14 +1379,24 @@ export default function MasterAdminConsole() {
                                        </button>
                                        {activeMenu === u.id && (
                                           <div className="absolute right-10 top-1/2 -translate-y-1/2 z-50 bg-background border border-glass-border shadow-2xl rounded-2xl w-44 overflow-hidden">
-                                             <button onClick={() => { setShowModal('Edit User'); setEditingUser(u); setForm({ ...form, ...u, fullname: `${u.firstname} ${u.lastname}`.trim() }); setActiveMenu(null); }} className="w-full px-5 py-3 flex items-center gap-3 text-[9px] font-black uppercase tracking-widest hover:bg-primary text-left text-muted hover:text-white"><Edit2 size={14} /> Edit profile</button>
+                                             <button onClick={() => { 
+                                                setShowModal('Edit User');
+                                                setEditingUser(u);
+                                                setForm(prev => ({ 
+                                                   ...prev, 
+                                                   ...u, 
+                                                   suspended: !!(u.suspended === true || u.suspended === 1 || u.suspended === '1'),
+                                                   fullname: `${u.firstname} ${u.lastname}`.trim()
+                                                }));
+                                                setActiveMenu(null);
+                                             }} className="w-full px-5 py-3 flex items-center gap-3 text-[9px] font-black uppercase tracking-widest hover:bg-primary text-left text-muted hover:text-white"><Edit2 size={14} /> Edit profile</button>
                                              <button onClick={() => { setMainTab('permissions'); setSubTab('Assign system roles'); setRoleForm({ ...roleForm, userid: u.id }); setActiveMenu(null); }} className="w-full px-5 py-3 flex items-center gap-3 text-[9px] font-black uppercase tracking-widest hover:bg-primary text-left text-muted hover:text-white"><ShieldCheck size={14} /> Manage Role</button>
                                           </div>
                                        )}
                                     </td>
                                  </tr>
                               ))}
-                              {manageUsers.length === 0 && !loading && (
+                              {visibleManageUsers.length === 0 && !loading && (
                                  <tr>
                                     <td colSpan={9} className="p-16 text-center text-muted text-[10px] font-black uppercase tracking-widest">
                                        No users found

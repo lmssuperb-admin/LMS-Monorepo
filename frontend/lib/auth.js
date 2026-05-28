@@ -37,9 +37,12 @@ const providers = [
             moodleToken: res.data.token,
           };
         }
-        return null;
-      } catch {
-        return null;
+        // If backend responded but indicated failure, throw so NextAuth can surface the message
+        const msg = res?.data?.message || 'Invalid credentials';
+        throw new Error(msg);
+      } catch (err) {
+        const msg = err?.response?.data?.message || err?.message || 'System authentication error';
+        throw new Error(msg);
       }
     },
   }),

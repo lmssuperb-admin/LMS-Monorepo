@@ -1,11 +1,54 @@
 {
   "5": {
     "courses": {
+      "1": {
+        "courseId": 1,
+        "courseName": "Course",
+        "startedAt": "2026-05-28T06:03:55.811Z",
+        "lastActivityAt": "2026-05-28T06:03:55.811Z",
+        "completedAt": null,
+        "source": "catalog",
+        "timeSpentSeconds": 0,
+        "completedModules": [],
+        "moduleTimes": {},
+        "totalModules": 4
+      },
+      "52": {
+        "courseId": 52,
+        "courseName": "English",
+        "startedAt": "2026-05-28T06:03:41.633Z",
+        "lastActivityAt": "2026-05-28T06:04:39.605Z",
+        "completedAt": null,
+        "source": "recommended",
+        "timeSpentSeconds": 0,
+        "completedModules": [],
+        "moduleTimes": {},
+        "totalModules": 1
+      },
+      "53": {
+        "courseId": 53,
+        "courseName": "video course",
+        "startedAt": "2026-05-28T07:16:42.434Z",
+        "lastActivityAt": "2026-05-28T07:21:23.566Z",
+        "completedAt": null,
+        "source": "recommended",
+        "timeSpentSeconds": 0,
+        "completedModules": [],
+        "moduleTimes": {
+          "0_0_69": {
+            "startedAt": "2026-05-28T07:16:46.745Z",
+            "completedAt": null,
+            "seconds": 0,
+            "lastViewedAt": "2026-05-28T07:18:40.747Z"
+          }
+        },
+        "totalModules": 1
+      },
       "54": {
         "courseId": 54,
         "courseName": "video and pdf",
         "startedAt": "2026-05-25T07:34:02.635Z",
-        "lastActivityAt": "2026-05-25T07:34:18.865Z",
+        "lastActivityAt": "2026-05-28T07:26:06.783Z",
         "completedAt": null,
         "source": "recommended",
         "timeSpentSeconds": 30,
@@ -17,7 +60,40 @@
             "startedAt": "2026-05-25T07:34:07.275Z",
             "completedAt": "2026-05-25T07:34:18.865Z",
             "seconds": 30,
-            "lastViewedAt": "2026-05-25T07:34:07.275Z"
+            "lastViewedAt": "2026-05-28T07:25:01.442Z"
+          },
+          "0_1_72": {
+            "startedAt": "2026-05-28T07:22:28.822Z",
+            "completedAt": null,
+            "seconds": 0,
+            "lastViewedAt": "2026-05-28T07:22:28.822Z"
+          }
+        },
+        "totalModules": 2
+      },
+      "55": {
+        "courseId": 55,
+        "courseName": "testing ",
+        "startedAt": "2026-05-28T06:05:04.033Z",
+        "lastActivityAt": "2026-05-28T06:05:31.756Z",
+        "completedAt": null,
+        "source": "catalog",
+        "timeSpentSeconds": 30,
+        "completedModules": [
+          "0_0_74"
+        ],
+        "moduleTimes": {
+          "0_0_74": {
+            "startedAt": "2026-05-28T06:05:10.869Z",
+            "completedAt": "2026-05-28T06:05:17.092Z",
+            "seconds": 30,
+            "lastViewedAt": "2026-05-28T06:05:31.756Z"
+          },
+          "0_1_75": {
+            "startedAt": "2026-05-28T06:05:29.267Z",
+            "completedAt": null,
+            "seconds": 0,
+            "lastViewedAt": "2026-05-28T06:05:29.267Z"
           }
         },
         "totalModules": 2

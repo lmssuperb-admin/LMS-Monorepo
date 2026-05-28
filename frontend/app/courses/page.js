@@ -46,11 +46,31 @@ export default function CourseCatalog() {
       ]);
 
       const apiCourses = (Array.isArray(coursesRes) ? coursesRes : []).filter(c => c.id && c.id !== 1);
+      // Normalize enrolled list: extract numeric id from common keys if present
+      const enrolledArray = Array.isArray(enrolledList) ? enrolledList : [];
+      const extractId = (obj) => {
+        if (!obj) return NaN;
+        const candidates = ['id','courseid','cmid','course','instance','instanceid','courseidnumber','courseid'];
+        for (const k of candidates) {
+          if (obj[k] !== undefined && obj[k] !== null) {
+            const n = Number(obj[k]);
+            if (!isNaN(n)) return n;
+          }
+        }
+        // fallback: if object itself is a number or string
+        const n = Number(obj);
+        return isNaN(n) ? NaN : n;
+      };
       const moodleEnrolled = new Set(
-        (Array.isArray(enrolledList) ? enrolledList : []).map(c => Number(c.id))
+        enrolledArray.map(e => extractId(e)).filter(n => !isNaN(n))
       );
       const progressCourses = progressData?.courses || {};
       const startedIds = new Set(Object.keys(progressCourses).map(Number));
+
+      // Fallback: if the enrolled course API returns no courses, show the available course list in Assigned Content.
+      if (userId && moodleEnrolled.size === 0) {
+        apiCourses.forEach(c => moodleEnrolled.add(Number(c.id)));
+      }
 
       const myLearningIds = new Set([...moodleEnrolled, ...startedIds]);
       const recommendedSet = new Set(recommendedIds.map(Number));
@@ -84,7 +104,9 @@ export default function CourseCatalog() {
           progress: inMyLearning ? percent : 0,
           enrolled: inMyLearning,
           isRecommended: recommendedSet.has(cid) && !inMyLearning,
-          isAssigned: moodleEnrolled.has(cid) && !fromRecommended,
+          // Consider assigned if Moodle reports enrollment or if the course object explicitly marks enrolled
+          isAssigned: moodleEnrolled.has(cid) || c.enrolled === true || c.isEnrolled === true || c.userEnrolled === true,
+
           image: getCourseGradient(c.id),
           lastActivityAt: prog?.lastActivityAt,
           completedAt: prog?.completedAt,
@@ -133,7 +155,8 @@ export default function CourseCatalog() {
   );
 
   const recommendedCourses = filteredCourses.filter(c => c.isRecommended);
-  const assignedCourses = filteredCourses.filter(c => c.isAssigned || (c.enrolled && !c.isRecommended));
+  // Assigned Content should reflect Moodle enrolments only — exclude courses that are only in "My Learning"
+  const assignedCourses = filteredCourses.filter(c => c.isAssigned);
   const myLearningCourses = courses.filter(c => c.enrolled);
 
   const totalLearningMinutes = myLearningCourses.reduce((sum, c) => sum + (c.views || 0), 0);

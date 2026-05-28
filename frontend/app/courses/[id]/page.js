@@ -1,4 +1,5 @@
-'use client';
+"use client";
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -259,8 +260,8 @@ export default function CourseAcademyPlayer() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--background)] pb-20 font-sans">
-      <div className="max-w-[1440px] mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in zoom-in-95 duration-700">
+    <div className="min-h-screen bg-[var(--background)] pb-0 font-sans">
+      <div className="max-w-[1440px] mx-auto px-6 py-3 grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in fade-in zoom-in-95 duration-700">
          
          {/* ── LEFT COLUMN: CURRICULUM SIDEBAR ── */}
          <div className="lg:col-span-3">
@@ -383,7 +384,7 @@ export default function CourseAcademyPlayer() {
          <div className="lg:col-span-9">
             {activeModule ? (
                /* ── MODULE PLAYER VIEW ── */
-               <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
+               <div className="space-y-2 animate-in slide-in-from-right-4 duration-500">
                   {/* Player Header */}
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-4 rounded-[20px] border border-glass-border shadow-sm">
                      <div>
@@ -410,7 +411,8 @@ export default function CourseAcademyPlayer() {
                   </div>
 
                   {/* Content Display (PDF/Video Viewer) */}
-                  <div className="academy-card bg-surface rounded-[24px] border-glass-border overflow-hidden shadow-xl min-h-[800px] flex flex-col">
+<div className="academy-card bg-surface rounded-[24px] border-glass-border overflow-hidden shadow-xl flex flex-col"
+     style={{ height: 'calc(100vh - 260px)', minHeight: '480px' }}>
                      {activeModule.modname === 'resource' || activeModule.modname === 'lesson' || activeModule.modname === 'video' ? (
                         <div className="flex-grow relative bg-slate-100 dark:bg-slate-900/50">
                            <div className="absolute inset-0 flex flex-col">
