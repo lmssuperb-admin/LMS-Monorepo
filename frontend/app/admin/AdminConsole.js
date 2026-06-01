@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, Fragment } from "react";
 import { useSession } from "next-auth/react";
+import { apiUrl } from "@/lib/apiBase";
 import {
   Users,
   BookOpen,
@@ -83,6 +84,8 @@ import {
   Layers,
 } from "lucide-react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+
 function formatLastAccessDetailed(seconds) {
   if (!seconds || seconds === 0) return "Never";
   const diff = Math.floor(Date.now() / 1000) - seconds;
@@ -136,6 +139,17 @@ function formatLastAccessDisplay(val) {
     hour12: false,
   });
 }
+
+const apiFetch = (input, init) => {
+  if (typeof input === "string") {
+    if (input.startsWith(API_URL)) {
+      input = apiUrl(input.slice(API_URL.length));
+    } else if (input.startsWith("/")) {
+      input = apiUrl(input);
+    }
+  }
+  return fetch(input, init);
+};
 
 const NOTIFICATION_TAGS = [
   "{user_fullname}",
@@ -442,156 +456,362 @@ export default function MasterAdminConsole() {
   const visibleManageUsers = manageUsers.filter(
     (u) => u.id !== session?.user?.id && u.role !== "admin",
   );
+  const fetchControllerRef = useRef(null);
+
+  useEffect(() => {
+  return () => {
+    if (fetchControllerRef.current) {
+      fetchControllerRef.current.abort();
+    }
+  };
+}, []);
+
+  // const fetchTabData = async () => {
+  //   // ðŸ§  Abort previous fetch if still running
+  //   if (window.fetchController) window.fetchController.abort();
+  //   window.fetchController = new AbortController();
+  //   const { signal } = window.fetchController;
+
+  //   setLoading(true);
+  //   try {
+  //     // ðŸ  Dashboard Data Fetching (Real Data aggregation)
+  //     if (mainTab === "dashboard") {
+  //       const [usersRes, coursesRes, eventsRes] = await Promise.all([
+  //         fetch(`${API_URL}/users`, { signal }).then((r) =>
+  //           r.json(),
+  //         ),
+  //         fetch(`${API_URL}/courses`, { signal }).then((r) =>
+  //           r.json(),
+  //         ),
+  //         fetch(`${API_URL}/system/calendar`, { signal }).then(
+  //           (r) => r.json(),
+  //         ),
+  //       ]);
+
+  //       setData((prev) => ({
+  //         ...prev,
+  //         users: Array.isArray(usersRes) ? usersRes : usersRes?.users || [],
+  //         courses: Array.isArray(coursesRes)
+  //           ? coursesRes
+  //           : coursesRes?.courses || [],
+  //         events: Array.isArray(eventsRes)
+  //           ? eventsRes.map((e) => ({
+  //               id: e.id,
+  //               day: new Date(e.timestart * 1000).getDate(),
+  //               month: new Date(e.timestart * 1000).getMonth(),
+  //               year: new Date(e.timestart * 1000).getFullYear(),
+  //               time: new Date(e.timestart * 1000).toLocaleTimeString("en-US", {
+  //                 hour: "2-digit",
+  //                 minute: "2-digit",
+  //                 hour12: false,
+  //               }),
+  //               title: e.name,
+  //               location: e.location || "Online",
+  //               type: e.eventtype,
+  //             }))
+  //           : [],
+  //       }));
+  //     }
+
+  //     let endpoint = "";
+  //     if (subTab === "Manage courses" || subTab === "Add course")
+  //       endpoint = "courses";
+  //     else if (subTab === "Define roles" || subTab === "Assign system roles")
+  //       endpoint = "roles";
+  //     else if (subTab === "Manage cohorts") {
+  //       const cohortRes = await fetch(`${API_URL}/cohorts`, {
+  //         signal,
+  //       }).then((r) => r.json());
+  //       setData((prev) => ({
+  //         ...prev,
+  //         cohorts: Array.isArray(cohortRes) ? cohortRes : [],
+  //       }));
+  //     } else if (subTab === "Learning Paths" || subTab === "Add Path") {
+  //       endpoint = "learningpaths";
+  //       // Also need courses for selection if adding path
+  //       if (subTab === "Add Path") {
+  //         const cRes = await fetch(`${API_URL}/courses`, {
+  //           signal,
+  //         }).then((r) => r.json());
+  //         setData((prev) => ({
+  //           ...prev,
+  //           courses: Array.isArray(cRes) ? cRes : cRes.courses || [],
+  //         }));
+  //       }
+  //     }
+
+  //     // ðŸ”„ Ensure users and their roles are fetched for enrollment step in Add Course
+  //     if (subTab === "Add course") {
+  //       const [userRes, assignRes] = await Promise.all([
+  //         fetch(`${API_URL}/users`, { signal }).then((r) =>
+  //           r.json(),
+  //         ),
+  //         fetch(`${API_URL}/api/roles/assignments`, { signal }).then(
+  //           (r) => r.json(),
+  //         ),
+  //       ]);
+  //       setData((prev) => ({
+  //         ...prev,
+  //         users: Array.isArray(userRes) ? userRes : userRes?.users || [],
+  //         systemAssignments: Array.isArray(assignRes) ? assignRes : [],
+  //       }));
+  //     }
+
+  //     // ðŸ”„ Main Endpoint Fetch
+  //     if (endpoint) {
+  //       const res = await fetch(`${API_URL}/api/${endpoint}`, {
+  //         signal,
+  //       }).then((r) => r.json());
+  //       let actualData = Array.isArray(res)
+  //         ? res
+  //         : res.users ||
+  //           res.courses ||
+  //           res.roles ||
+  //           res.learningpaths ||
+  //           res.cohorts ||
+  //           [];
+  //       if (endpoint) setData((prev) => ({ ...prev, [endpoint]: actualData }));
+  //     }
+
+  //     // Fetch categories if doing courses
+  //     if (mainTab === "courses") {
+  //       const cats = await fetch(
+  //         `${API_URL}/api/courses/categories`,
+  //         { signal },
+  //       ).then((r) => r.json());
+  //       setData((prev) => ({
+  //         ...prev,
+  //         categories: Array.isArray(cats) ? cats : [],
+  //       }));
+  //     }
+
+  //     // ðŸ” Global Assignments Persistence Sync
+  //     if (mainTab === "permissions" || subTab === "Assign system roles") {
+  //       const [usersRes, assignRes] = await Promise.all([
+  //         fetch(`${API_URL}/users`, { signal }).then((r) =>
+  //           r.json(),
+  //         ),
+  //         fetch(`${API_URL}/api/roles/assignments?contextid=1`, {
+  //           signal,
+  //         }).then((r) => r.json()),
+  //       ]);
+
+  //       setData((prev) => ({
+  //         ...prev,
+  //         users: Array.isArray(usersRes) ? usersRes : usersRes?.users || [],
+  //         systemAssignments: Array.isArray(assignRes) ? assignRes : [],
+  //       }));
+  //     }
+  //   } catch (err) {
+  //     if (err.name !== "AbortError") console.error("Fetch error:", err);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   const fetchTabData = async () => {
-    // ðŸ§  Abort previous fetch if still running
-    if (window.fetchController) window.fetchController.abort();
-    window.fetchController = new AbortController();
-    const { signal } = window.fetchController;
+  // Abort previous request
+  if (fetchControllerRef.current) {
+    fetchControllerRef.current.abort();
+  }
 
-    setLoading(true);
-    try {
-      // ðŸ  Dashboard Data Fetching (Real Data aggregation)
-      if (mainTab === "dashboard") {
-        const [usersRes, coursesRes, eventsRes] = await Promise.all([
-          fetch(`http://localhost:4000/api/users`, { signal }).then((r) =>
-            r.json(),
-          ),
-          fetch(`http://localhost:4000/api/courses`, { signal }).then((r) =>
-            r.json(),
-          ),
-          fetch(`http://localhost:4000/api/system/calendar`, { signal }).then(
-            (r) => r.json(),
-          ),
-        ]);
+  fetchControllerRef.current = new AbortController();
+  const { signal } = fetchControllerRef.current;
 
-        setData((prev) => ({
-          ...prev,
-          users: Array.isArray(usersRes) ? usersRes : usersRes?.users || [],
-          courses: Array.isArray(coursesRes)
-            ? coursesRes
-            : coursesRes?.courses || [],
-          events: Array.isArray(eventsRes)
-            ? eventsRes.map((e) => ({
-                id: e.id,
-                day: new Date(e.timestart * 1000).getDate(),
-                month: new Date(e.timestart * 1000).getMonth(),
-                year: new Date(e.timestart * 1000).getFullYear(),
-                time: new Date(e.timestart * 1000).toLocaleTimeString("en-US", {
+  const fetchJSON = async (url) => {
+    const response = await fetch(url, { signal });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(
+        `HTTP ${response.status} ${response.statusText}\n${url}\n${text}`
+      );
+    }
+
+    return response.json();
+  };
+
+  setLoading(true);
+
+  try {
+    // Dashboard
+    if (mainTab === "dashboard") {
+      const [usersRes, coursesRes, eventsRes] = await Promise.all([
+        fetchJSON(`${API_URL}/users`),
+        fetchJSON(`${API_URL}/courses`),
+        fetchJSON(`${API_URL}/system/calendar`),
+      ]);
+
+      setData((prev) => ({
+        ...prev,
+        users: Array.isArray(usersRes)
+          ? usersRes
+          : usersRes?.users || [],
+
+        courses: Array.isArray(coursesRes)
+          ? coursesRes
+          : coursesRes?.courses || [],
+
+        events: Array.isArray(eventsRes)
+          ? eventsRes.map((e) => ({
+              id: e.id,
+              day: new Date(e.timestart * 1000).getDate(),
+              month: new Date(e.timestart * 1000).getMonth(),
+              year: new Date(e.timestart * 1000).getFullYear(),
+              time: new Date(e.timestart * 1000).toLocaleTimeString(
+                "en-US",
+                {
                   hour: "2-digit",
                   minute: "2-digit",
                   hour12: false,
-                }),
-                title: e.name,
-                location: e.location || "Online",
-                type: e.eventtype,
-              }))
-            : [],
-        }));
-      }
-
-      let endpoint = "";
-      if (subTab === "Manage courses" || subTab === "Add course")
-        endpoint = "courses";
-      else if (subTab === "Define roles" || subTab === "Assign system roles")
-        endpoint = "roles";
-      else if (subTab === "Manage cohorts") {
-        const cohortRes = await fetch(`http://localhost:4000/api/cohorts`, {
-          signal,
-        }).then((r) => r.json());
-        setData((prev) => ({
-          ...prev,
-          cohorts: Array.isArray(cohortRes) ? cohortRes : [],
-        }));
-      } else if (subTab === "Learning Paths" || subTab === "Add Path") {
-        endpoint = "learningpaths";
-        // Also need courses for selection if adding path
-        if (subTab === "Add Path") {
-          const cRes = await fetch(`http://localhost:4000/api/courses`, {
-            signal,
-          }).then((r) => r.json());
-          setData((prev) => ({
-            ...prev,
-            courses: Array.isArray(cRes) ? cRes : cRes.courses || [],
-          }));
-        }
-      }
-
-      // ðŸ”„ Ensure users and their roles are fetched for enrollment step in Add Course
-      if (subTab === "Add course") {
-        const [userRes, assignRes] = await Promise.all([
-          fetch(`http://localhost:4000/api/users`, { signal }).then((r) =>
-            r.json(),
-          ),
-          fetch(`http://localhost:4000/api/roles/assignments`, { signal }).then(
-            (r) => r.json(),
-          ),
-        ]);
-        setData((prev) => ({
-          ...prev,
-          users: Array.isArray(userRes) ? userRes : userRes?.users || [],
-          systemAssignments: Array.isArray(assignRes) ? assignRes : [],
-        }));
-      }
-
-      // ðŸ”„ Main Endpoint Fetch
-      if (endpoint) {
-        const res = await fetch(`http://localhost:4000/api/${endpoint}`, {
-          signal,
-        }).then((r) => r.json());
-        let actualData = Array.isArray(res)
-          ? res
-          : res.users ||
-            res.courses ||
-            res.roles ||
-            res.learningpaths ||
-            res.cohorts ||
-            [];
-        if (endpoint) setData((prev) => ({ ...prev, [endpoint]: actualData }));
-      }
-
-      // Fetch categories if doing courses
-      if (mainTab === "courses") {
-        const cats = await fetch(
-          `http://localhost:4000/api/courses/categories`,
-          { signal },
-        ).then((r) => r.json());
-        setData((prev) => ({
-          ...prev,
-          categories: Array.isArray(cats) ? cats : [],
-        }));
-      }
-
-      // ðŸ” Global Assignments Persistence Sync
-      if (mainTab === "permissions" || subTab === "Assign system roles") {
-        const [usersRes, assignRes] = await Promise.all([
-          fetch(`http://localhost:4000/api/users`, { signal }).then((r) =>
-            r.json(),
-          ),
-          fetch(`http://localhost:4000/api/roles/assignments?contextid=1`, {
-            signal,
-          }).then((r) => r.json()),
-        ]);
-
-        setData((prev) => ({
-          ...prev,
-          users: Array.isArray(usersRes) ? usersRes : usersRes?.users || [],
-          systemAssignments: Array.isArray(assignRes) ? assignRes : [],
-        }));
-      }
-    } catch (err) {
-      if (err.name !== "AbortError") console.error("Fetch error:", err);
-    } finally {
-      setLoading(false);
+                }
+              ),
+              title: e.name,
+              location: e.location || "Online",
+              type: e.eventtype,
+            }))
+          : [],
+      }));
     }
-  };
 
+    let endpoint = "";
+
+    if (
+      subTab === "Manage courses" ||
+      subTab === "Add course"
+    ) {
+      endpoint = "courses";
+    } else if (
+      subTab === "Define roles" ||
+      subTab === "Assign system roles"
+    ) {
+      endpoint = "roles";
+    } else if (subTab === "Manage cohorts") {
+      const cohortRes = await fetchJSON(
+        `${API_URL}/cohorts`
+      );
+
+      setData((prev) => ({
+        ...prev,
+        cohorts: Array.isArray(cohortRes)
+          ? cohortRes
+          : cohortRes?.cohorts || [],
+      }));
+    } else if (
+      subTab === "Learning Paths" ||
+      subTab === "Add Path"
+    ) {
+      endpoint = "learningpaths";
+
+      if (subTab === "Add Path") {
+        const cRes = await fetchJSON(
+          `${API_URL}/courses`
+        );
+
+        setData((prev) => ({
+          ...prev,
+          courses: Array.isArray(cRes)
+            ? cRes
+            : cRes?.courses || [],
+        }));
+      }
+    }
+
+    // Add Course page
+    if (subTab === "Add course") {
+      const [userRes, assignRes] = await Promise.all([
+        fetchJSON(`${API_URL}/users`),
+        fetchJSON(`${API_URL}/api/roles/assignments`),
+      ]);
+
+      setData((prev) => ({
+        ...prev,
+        users: Array.isArray(userRes)
+          ? userRes
+          : userRes?.users || [],
+        systemAssignments: Array.isArray(assignRes)
+          ? assignRes
+          : assignRes?.assignments || [],
+      }));
+    }
+
+    // Main endpoint
+    if (endpoint) {
+      const res = await fetchJSON(
+        `${API_URL}/api/${endpoint}`
+      );
+
+      const actualData = Array.isArray(res)
+        ? res
+        : res.users ||
+          res.courses ||
+          res.roles ||
+          res.learningpaths ||
+          res.cohorts ||
+          [];
+
+      setData((prev) => ({
+        ...prev,
+        [endpoint]: actualData,
+      }));
+    }
+
+    // Categories
+    if (mainTab === "courses") {
+      const cats = await fetchJSON(
+        `${API_URL}/api/courses/categories`
+      );
+
+      setData((prev) => ({
+        ...prev,
+        categories: Array.isArray(cats)
+          ? cats
+          : cats?.categories || [],
+      }));
+    }
+
+    // Permissions
+    if (
+      mainTab === "permissions" ||
+      subTab === "Assign system roles"
+    ) {
+      const [usersRes, assignRes] = await Promise.all([
+        fetchJSON(`${API_URL}/users`),
+        fetchJSON(
+          `${API_URL}/api/roles/assignments?contextid=1`
+        ),
+      ]);
+
+      setData((prev) => ({
+        ...prev,
+        users: Array.isArray(usersRes)
+          ? usersRes
+          : usersRes?.users || [],
+        systemAssignments: Array.isArray(assignRes)
+          ? assignRes
+          : assignRes?.assignments || [],
+      }));
+    }
+  } catch (err) {
+    if (err.name === "AbortError") return;
+
+    // console.error("fetchTabData error:", {
+    //   message: err.message,
+    //   stack: err.stack,
+    //   apiUrl: API_URL,
+    //   mainTab,
+    //   subTab,
+    // });
+  } finally {
+    setLoading(false);
+  }
+};
   const handleAssignRole = async () => {
     setLoading(true);
     try {
       if (!roleForm.userid || !roleForm.roleid)
         throw new Error("Please select both a user and a role");
-      const res = await fetch("http://localhost:4000/api/roles/assign", {
+      const res = await fetch(`${API_URL}/api/roles/assign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(roleForm),
@@ -632,7 +852,7 @@ const handleEnrollUsers = async () => {
       }
     }
 
-    const res = await fetch('http://localhost:4000/api/enrolments/enroll', {
+    const res = await fetch(`${API_URL}/api/enrolments/enroll`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enrolments }),
@@ -658,7 +878,7 @@ const handleEnrollUsers = async () => {
     if (!confirm("Are you sure you want to revoke this role?")) return;
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:4000/api/roles/unassign", {
+      const res = await fetch(`${API_URL}/api/roles/unassign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -711,7 +931,7 @@ const handleEnrollUsers = async () => {
           "-" +
           Math.floor(Math.random() * 1000),
       };
-      const course = await fetch("http://localhost:4000/api/courses", {
+      const course = await fetch(`${API_URL}/api/courses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(coursePayload),
@@ -729,7 +949,7 @@ const handleEnrollUsers = async () => {
         for (const act of topic.activities) {
           console.log(`ðŸ“¡ Posting activity: ${act.name} to section ${i}`);
           const actRes = await fetch(
-            `http://localhost:4000/api/courses/${course.id}/activities`,
+            `${API_URL}/api/courses/${course.id}/activities`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -756,7 +976,7 @@ const handleEnrollUsers = async () => {
               console.log(
                 `ðŸ”„ Syncing PDF for activity ${actRes.id} to Moodle...`,
               );
-              await fetch(`http://localhost:4000/api/courses/sync-file`, {
+              await fetch(`${API_URL}/api/courses/sync-file`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -778,7 +998,7 @@ const handleEnrollUsers = async () => {
               console.log(
                 `ðŸ”„ Syncing Video for activity ${actRes.id} to Moodle...`,
               );
-              await fetch(`http://localhost:4000/api/courses/sync-file`, {
+              await fetch(`${API_URL}/api/courses/sync-file`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -797,7 +1017,7 @@ const handleEnrollUsers = async () => {
       // 3. Enroll Users
       for (const userId of enrolledUserIds) {
         const roleid = enrolledRoles[userId] || 5; // Default to student
-        await fetch("http://localhost:4000/api/roles/assign", {
+        await fetch(`${API_URL}/api/roles/assign`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -879,7 +1099,7 @@ const handleEnrollUsers = async () => {
   const handleCreateCategory = async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:4000/api/courses/categories", {
+      const res = await fetch(`${API_URL}/api/courses/categories`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(categoryForm),
@@ -899,7 +1119,7 @@ const handleEnrollUsers = async () => {
     if (!confirm("Are you sure you want to delete this course?")) return;
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/courses/${id}`, {
+      const res = await fetch(`${API_URL}/api/courses/${id}`, {
         method: "DELETE",
       }).then((r) => r.json());
       if (res.error) throw new Error(res.error);
@@ -915,7 +1135,7 @@ const handleEnrollUsers = async () => {
     if (!confirm("Are you sure you want to delete this learning path?")) return;
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:4000/api/learningpaths/${id}`, {
+      const res = await fetch(`${API_URL}/api/learningpaths/${id}`, {
         method: "DELETE",
       }).then((r) => r.json());
       if (res.error) throw new Error(res.error);
@@ -945,7 +1165,7 @@ const handleEnrollUsers = async () => {
         systemRole: userFilters.systemRole || "",
       });
       const res = await fetch(
-        `http://localhost:4000/api/users/manage?${params}`,
+        `${API_URL}/api/users/manage?${params}`,
       ).then((r) => r.json());
       if (res.error) throw new Error(res.error);
       setUserManageStats(res.stats);
@@ -976,7 +1196,7 @@ const handleEnrollUsers = async () => {
   const fetchCohortsList = async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:4000/api/cohorts").then((r) =>
+      const res = await fetch(`${API_URL}/api/cohorts`).then((r) =>
         r.json(),
       );
       if (res.error)
@@ -998,7 +1218,7 @@ const handleEnrollUsers = async () => {
     if (!name) return alert("Please enter a cohort name");
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:4000/api/cohorts", {
+      const res = await fetch(`${API_URL}/api/cohorts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1024,7 +1244,7 @@ const handleEnrollUsers = async () => {
   const loadPathNotifications = async (pathId) => {
     try {
       const res = await fetch(
-        `http://localhost:4000/api/learningpaths/${pathId}/notifications`,
+        `${API_URL}/api/learningpaths/${pathId}/notifications`,
       ).then((r) => r.json());
       if (res.error) throw new Error(res.error);
       setPathNotifications({ ...defaultPathNotifications(), ...res });
@@ -1048,7 +1268,7 @@ const handleEnrollUsers = async () => {
     setLoading(true);
     try {
       const res = await fetch(
-        `http://localhost:4000/api/learningpaths/${editingPath.id}/notifications`,
+        `${API_URL}/api/learningpaths/${editingPath.id}/notifications`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -1079,7 +1299,7 @@ const handleEnrollUsers = async () => {
       return;
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:4000/api/cohorts", {
+      const res = await fetch(`${API_URL}/api/cohorts`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cohortids: selectedCohortIds }),
@@ -1099,8 +1319,8 @@ const handleEnrollUsers = async () => {
     setLoading(true);
     try {
       const url = editingPath
-        ? `http://localhost:4000/api/learningpaths/${editingPath.id}`
-        : "http://localhost:4000/api/learningpaths";
+        ? `${API_URL}/api/learningpaths/${editingPath.id}`
+        : `${API_URL}/api/learningpaths`;
       const method = editingPath ? "PUT" : "POST";
 
       const res = await fetch(url, {
@@ -1149,7 +1369,7 @@ const handleEnrollUsers = async () => {
     try {
       // Delete courses sequentially or in parallel
       const deletePromises = selectedCourseIds.map((id) =>
-        fetch(`http://localhost:4000/api/courses/${id}`, {
+        fetch(`${API_URL}/api/courses/${id}`, {
           method: "DELETE",
         }).then((r) => r.json()),
       );
@@ -1178,7 +1398,7 @@ const handleEnrollUsers = async () => {
     try {
       if (showModal === "Edit Course") {
         const res = await fetch(
-          `http://localhost:4000/api/courses/${editingCourse.id}`,
+          `${API_URL}/api/courses/${editingCourse.id}`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -1194,8 +1414,8 @@ const handleEnrollUsers = async () => {
       }
       const isEdit = showModal === "Edit User";
       const url = isEdit
-        ? `http://localhost:4000/api/users/${editingUser.id}`
-        : "http://localhost:4000/api/users";
+        ? `${API_URL}/api/users/${editingUser.id}`
+        : `${API_URL}/api/users`;
       const method = isEdit ? "PUT" : "POST";
       const { cohortIds, ...userFields } = form;
       const payload = isEdit
@@ -1236,7 +1456,7 @@ const handleEnrollUsers = async () => {
     const formData = new FormData();
     formData.append("image", file);
     try {
-      const res = await fetch("http://localhost:4000/api/system/upload", {
+      const res = await fetch(`${API_URL}/api/system/upload`, {
         method: "POST",
         body: formData,
       }).then((r) => r.json());
@@ -1263,7 +1483,7 @@ const handleEnrollUsers = async () => {
     formData.append("image", file);
 
     try {
-      const res = await fetch("http://localhost:4000/api/system/upload", {
+      const res = await fetch(`${API_URL}/api/system/upload`, {
         method: "POST",
         body: formData,
       }).then((r) => r.json());
@@ -1354,7 +1574,7 @@ const handleEnrollUsers = async () => {
     });
     setModalSection("general");
     if (!data.roles.length) {
-      fetch("http://localhost:4000/api/roles")
+      fetch(`${API_URL}/api/roles`)
         .then((r) => r.json())
         .then((res) => {
           setData((prev) => ({
@@ -5019,7 +5239,7 @@ const handleEnrollUsers = async () => {
                           setLoading(true);
                           try {
                             const res = await fetch(
-                              "http://localhost:4000/api/system/upload",
+                              `${API_URL}/api/system/upload`,
                               { method: "POST", body: formData },
                             ).then((r) => r.json());
                             if (res.url)
