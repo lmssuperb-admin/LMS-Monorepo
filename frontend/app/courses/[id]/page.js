@@ -311,6 +311,7 @@ export default function CourseAcademyPlayer() {
                               if (mod.modname === 'quiz') Icon = ClipboardCheck;
                               if (mod.modname === 'zoom' || mod.name?.toLowerCase().includes('session')) Icon = Video;
                               if (mod.modname === 'lesson') Icon = User;
+                              
 
                               const isCompleted = isModuleDone(tIdx, mIdx, mod);
                               const isActive = activeModule?._key === buildModuleKey(tIdx, mIdx, mod);
