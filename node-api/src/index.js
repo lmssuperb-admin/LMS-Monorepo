@@ -20,7 +20,21 @@ const PORT = process.env.PORT || 4000;
 const path = require('path');
 
 // Middleware
-app.use(cors());
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS policy blocked request from origin: ${origin}`));
+    }
+  },
+  credentials: true,
+}));
 app.use(express.json());
 
 // Expose Static Uploads

@@ -3,7 +3,11 @@ const qs = require('qs');
 
 class MoodleService {
   constructor() {
-    this.baseUrl = (process.env.MOODLE_URL || '').trim().replace(/^"|"$/g, '');
+    let rawBaseUrl = (process.env.MOODLE_URL || '').trim().replace(/^"|"$/g, '');
+    if (rawBaseUrl && !/^https?:\/\//i.test(rawBaseUrl)) {
+      rawBaseUrl = `https://${rawBaseUrl}`;
+    }
+    this.baseUrl = rawBaseUrl;
     this.token = (process.env.MOODLE_WS_TOKEN || '').trim().replace(/^"|"$/g, '');
     try {
       this.restEndpoint = new URL('/webservice/rest/server.php', this.baseUrl).toString();
